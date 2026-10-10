@@ -1,0 +1,36 @@
+{
+  "name": "workmatch",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WorkMatch — AI-Powered Location-Based Temporary Employment Marketplace",
+  "type": "module",
+  "scripts": {
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "dev": "npm --prefix server run dev",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix server run start",
+    "seed": "npm --prefix server run seed",
+    "test": "npm --prefix server run test"
+  },
+  "keywords": [
+    "temporary-employment",
+    "job-marketplace",
+    "explainable-ai",
+    "location-based"
+  ],
+  "author": "WorkMatch Team",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.5",
+    "morgan": "^1.10.0",
+    "zod": "^3.24.1"
+  }
+}

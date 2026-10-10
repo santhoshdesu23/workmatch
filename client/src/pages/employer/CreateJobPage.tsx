@@ -1,0 +1,564 @@
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Briefcase,
+  MapPin,
+  Calendar,
+  Clock,
+  DollarSign,
+  Users,
+  CheckCircle2,
+  ArrowRight,
+  ArrowLeft,
+  Sparkles,
+  ShieldCheck,
+  Building2,
+  Navigation
+} from 'lucide-react';
+import api from '../../api/client';
+import { useToast } from '../../context/ToastContext';
+import { Card } from '../../components/common/Card';
+import { Button } from '../../components/common/Button';
+import { Badge } from '../../components/common/Badge';
+
+export const CreateJobPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { success, error: toastError } = useToast();
+
+  const [currentStep, setCurrentStep] = useState<number>(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Step 1: Details
+  const [title, setTitle] = useState('');
+  const [category, setCategory] = useState('Event assistance');
+  const [description, setDescription] = useState('');
+
+  // Step 2: Location & Schedule
+  const [locationName, setLocationName] = useState('');
+  const [coordinates, setCoordinates] = useState<[number, number]>([-73.9851, 40.7484]); // Default NYC Midtown
+  const [workDate, setWorkDate] = useState('');
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('17:00');
+  const [breakDurationMinutes, setBreakDurationMinutes] = useState<number>(30);
+  const [totalHours, setTotalHours] = useState<number>(7.5);
+
+  // Step 3: Requirements
+  const [openings, setOpenings] = useState<number>(2);
+  const [requiredSkills, setRequiredSkills] = useState('');
+  const [experienceRequirement, setExperienceRequirement] = useState('No prior experience necessary, training provided on site');
+  const [dressCode, setDressCode] = useState('Casual comfortable clothing, closed-toe shoes');
+  const [physicalRequirements, setPhysicalRequirements] = useState('Standard physical mobility for role');
+  const [ageRestriction, setAgeRestriction] = useState('18+');
+
+  // Step 4: Pay & Terms
+  const [grossPay, setGrossPay] = useState<number>(25);
+  const [payBasis, setPayBasis] = useState<string>('hourly');
+  const [paymentMethod, setPaymentMethod] = useState('Bank Transfer / Platform Recorded');
+  const [paymentTiming, setPaymentTiming] = useState('Same Day / Within 24 hours of completion');
+  const [cancellationPolicy, setCancellationPolicy] = useState('Notice must be provided at least 12 hours prior to shift commencement');
+  const [applicationDeadline, setApplicationDeadline] = useState('');
+
+  const categories = [
+    'Event assistance',
+    'Wedding and catering support',
+    'Restaurant and hospitality',
+    'Retail and store assistance',
+    'Warehouse and packing',
+    'Delivery and logistics',
+    'Data entry and office assistance',
+    'Cleaning and maintenance',
+    'Tutoring and event staffing'
+  ];
+
+  const handleUseBrowserGPS = () => {
+    if (!navigator.geolocation) {
+      toastError('Geolocation not supported in browser.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCoordinates([pos.coords.longitude, pos.coords.latitude]);
+        if (!locationName) {
+          setLocationName(`Current Business GPS (${pos.coords.latitude.toFixed(3)}, ${pos.coords.longitude.toFixed(3)})`);
+        }
+        success('Coordinates fetched from device.');
+      },
+      (err) => toastError(err.message)
+    );
+  };
+
+  const validateStep = (step: number) => {
+    if (step === 1) {
+      if (!title.trim() || title.length < 5) {
+        toastError('Please provide a clear job title (at least 5 characters).');
+        return false;
+      }
+      if (!description.trim() || description.length < 15) {
+        toastError('Please provide a descriptive role description (at least 15 characters).');
+        return false;
+      }
+    } else if (step === 2) {
+      if (!locationName.trim()) {
+        toastError('Please specify the work address or venue location.');
+        return false;
+      }
+      if (!workDate) {
+        toastError('Please select the scheduled shift date.');
+        return false;
+      }
+      if (!startTime || !endTime) {
+        toastError('Please select both start and end shift times.');
+        return false;
+      }
+    } else if (step === 3) {
+      if (openings < 1) {
+        toastError('Number of openings must be at least 1.');
+        return false;
+      }
+      if (!requiredSkills.trim()) {
+        toastError('Please enter at least one prerequisite skill.');
+        return false;
+      }
+    } else if (step === 4) {
+      if (grossPay <= 0) {
+        toastError('Offered pay amount must be greater than $0.');
+        return false;
+      }
+      if (!applicationDeadline) {
+        setApplicationDeadline(workDate);
+      }
+    }
+    return true;
+  };
+
+  const nextStep = () => {
+    if (validateStep(currentStep)) {
+      setCurrentStep((s) => Math.min(5, s + 1));
+    }
+  };
+
+  const prevStep = () => {
+    setCurrentStep((s) => Math.max(1, s - 1));
+  };
+
+  const handlePublish = async () => {
+    setIsSubmitting(true);
+    try {
+      const skillsArray = requiredSkills.split(',').map((s) => s.trim()).filter(Boolean);
+
+      const res = await api.post('/jobs', {
+        title,
+        description,
+        category,
+        locationName,
+        coordinates,
+        workDate,
+        startTime,
+        endTime,
+        breakDurationMinutes,
+        totalHours,
+        openings,
+        requiredSkills: skillsArray,
+        experienceRequirement,
+        dressCode,
+        physicalRequirements,
+        ageRestriction,
+        grossPay,
+        payBasis,
+        paymentMethod,
+        paymentTiming,
+        cancellationPolicy,
+        applicationDeadline: applicationDeadline || workDate,
+        status: 'OPEN'
+      });
+
+      if (res.data?.success) {
+        success('Shift published successfully! Open for worker discovery.');
+        navigate('/employer/jobs');
+      }
+    } catch (err: any) {
+      toastError(err.message || 'Failed to publish shift.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-6">
+      {/* Wizard Progress Bar */}
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Create & Publish Shift</h1>
+        <p className="text-xs text-slate-500">Step {currentStep} of 5 — Complete all transparent shift terms.</p>
+
+        <div className="grid grid-cols-5 gap-2 mt-4">
+          {['Job Details', 'Schedule', 'Requirements', 'Pay & Terms', 'Preview'].map((st, idx) => (
+            <div key={st} className="space-y-1">
+              <div
+                className={`h-1.5 rounded-full transition-all ${
+                  currentStep >= idx + 1 ? 'bg-emerald-600' : 'bg-slate-200'
+                }`}
+              />
+              <span className="text-[10px] font-semibold text-slate-500 hidden sm:block truncate">
+                {st}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Step 1: Details */}
+      {currentStep === 1 && (
+        <Card className="p-6 space-y-4">
+          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider pb-2 border-b border-slate-100">
+            Step 1: Role Overview
+          </h2>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Shift / Job Title *</label>
+            <input
+              type="text"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Banquet Check-in & Registration Assistant"
+              className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Job Category *</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none cursor-pointer"
+            >
+              {categories.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Detailed Shift Responsibilities *</label>
+            <textarea
+              rows={5}
+              required
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the duties clearly: greeting guests, scanning badges, physical tasks, expectations..."
+              className="w-full text-xs p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+        </Card>
+      )}
+
+      {/* Step 2: Location and Schedule */}
+      {currentStep === 2 && (
+        <Card className="p-6 space-y-4">
+          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider pb-2 border-b border-slate-100">
+            Step 2: Location & Working Hours
+          </h2>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Venue or Shift Work Address *</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                required
+                value={locationName}
+                onChange={(e) => setLocationName(e.target.value)}
+                placeholder="e.g. Javits Center, 429 11th Ave, New York, NY"
+                className="flex-1 text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+              <Button type="button" variant="outline" size="sm" onClick={handleUseBrowserGPS} leftIcon={<Navigation className="w-3.5 h-3.5" />}>
+                GPS
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Shift Date *</label>
+              <input
+                type="date"
+                required
+                value={workDate}
+                onChange={(e) => setWorkDate(e.target.value)}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Start Time *</label>
+              <input
+                type="time"
+                required
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">End Time *</label>
+              <input
+                type="time"
+                required
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Meal / Rest Break (minutes)</label>
+              <input
+                type="number"
+                min="0"
+                value={breakDurationMinutes}
+                onChange={(e) => setBreakDurationMinutes(Number(e.target.value))}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Total Billable Hours</label>
+              <input
+                type="number"
+                step="0.25"
+                min="0.5"
+                value={totalHours}
+                onChange={(e) => setTotalHours(Number(e.target.value))}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Step 3: Requirements */}
+      {currentStep === 3 && (
+        <Card className="p-6 space-y-4">
+          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider pb-2 border-b border-slate-100">
+            Step 3: Worker Requirements
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Number of Openings (Staff Needed) *</label>
+              <input
+                type="number"
+                min="1"
+                required
+                value={openings}
+                onChange={(e) => setOpenings(Number(e.target.value))}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Age Restriction</label>
+              <input
+                type="text"
+                value={ageRestriction}
+                onChange={(e) => setAgeRestriction(e.target.value)}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Required Skills (Comma separated) *</label>
+            <input
+              type="text"
+              required
+              value={requiredSkills}
+              onChange={(e) => setRequiredSkills(e.target.value)}
+              placeholder="e.g. Guest Registration, Food Handling, Box Packing"
+              className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Dress Code Requirements</label>
+            <input
+              type="text"
+              value={dressCode}
+              onChange={(e) => setDressCode(e.target.value)}
+              placeholder="e.g. Plain black polo shirt, black trousers, non-slip shoes"
+              className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Experience Requirement</label>
+              <input
+                type="text"
+                value={experienceRequirement}
+                onChange={(e) => setExperienceRequirement(e.target.value)}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Physical Requirements</label>
+              <input
+                type="text"
+                value={physicalRequirements}
+                onChange={(e) => setPhysicalRequirements(e.target.value)}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Step 4: Pay & Terms */}
+      {currentStep === 4 && (
+        <Card className="p-6 space-y-4">
+          <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider pb-2 border-b border-slate-100">
+            Step 4: Compensation & Terms
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Gross Pay Amount ($) *</label>
+              <input
+                type="number"
+                min="1"
+                required
+                value={grossPay}
+                onChange={(e) => setGrossPay(Number(e.target.value))}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Basis *</label>
+              <select
+                value={payBasis}
+                onChange={(e) => setPayBasis(e.target.value)}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none cursor-pointer"
+              >
+                <option value="hourly">Hourly ($/hr)</option>
+                <option value="daily">Daily Flat Rate</option>
+                <option value="shift">Shift-based Flat Rate</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Method Label</label>
+              <input
+                type="text"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Expected Payment Timing</label>
+              <input
+                type="text"
+                value={paymentTiming}
+                onChange={(e) => setPaymentTiming(e.target.value)}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Cancellation Policy</label>
+            <textarea
+              rows={2}
+              value={cancellationPolicy}
+              onChange={(e) => setCancellationPolicy(e.target.value)}
+              className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Application Deadline</label>
+            <input
+              type="date"
+              value={applicationDeadline}
+              onChange={(e) => setApplicationDeadline(e.target.value)}
+              className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+            />
+          </div>
+        </Card>
+      )}
+
+      {/* Step 5: Preview & Publish */}
+      {currentStep === 5 && (
+        <Card className="p-6 space-y-6">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Step 5: Shift Preview</h2>
+              <p className="text-xs text-slate-500">Confirm all details before publishing to marketplace</p>
+            </div>
+            <Badge variant="emerald">Ready to Publish</Badge>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <Badge variant="emerald" size="sm">{category}</Badge>
+              <h3 className="text-xl font-bold text-slate-900 mt-1">{title}</h3>
+              <p className="text-xs text-slate-600 mt-2 whitespace-pre-line leading-relaxed">{description}</p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-slate-50 p-4 rounded-xl">
+              <div>
+                <span className="text-slate-400 block">Work Date</span>
+                <span className="font-bold text-slate-800">{workDate}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block">Hours</span>
+                <span className="font-bold text-slate-800">{startTime} – {endTime}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block">Offered Pay</span>
+                <span className="font-bold text-emerald-700">${grossPay} / {payBasis}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block">Openings</span>
+                <span className="font-bold text-slate-800">{openings} workers</span>
+              </div>
+            </div>
+
+            <div className="text-xs space-y-1 text-slate-600">
+              <div><strong>Location:</strong> {locationName}</div>
+              <div><strong>Required Skills:</strong> {requiredSkills}</div>
+              <div><strong>Dress Code:</strong> {dressCode}</div>
+              <div><strong>Payment Terms:</strong> {paymentMethod} ({paymentTiming})</div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Navigation Buttons */}
+      <div className="flex justify-between items-center pt-2">
+        {currentStep > 1 ? (
+          <Button type="button" variant="outline" size="sm" onClick={prevStep} leftIcon={<ArrowLeft className="w-3.5 h-3.5" />}>
+            Back
+          </Button>
+        ) : <div />}
+
+        {currentStep < 5 ? (
+          <Button type="button" size="sm" onClick={nextStep} rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
+            Continue
+          </Button>
+        ) : (
+          <Button type="button" size="sm" isLoading={isSubmitting} onClick={handlePublish} leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}>
+            Publish Shift to Marketplace
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+};
