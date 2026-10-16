@@ -52,6 +52,12 @@ describe('Production Blocker Fixes & Regression Test Suite', () => {
     });
     worker2Token = w2Res.body.token;
     worker2Id = w2Res.body.user.id;
+
+    // Verify test accounts so standard application & scheduling tests can proceed
+    await User.updateMany(
+      { _id: { $in: [employerId, workerId, worker2Id] } },
+      { $set: { emailVerified: true } }
+    );
   });
 
   afterAll(async () => {
@@ -79,6 +85,8 @@ describe('Production Blocker Fixes & Regression Test Suite', () => {
         password: 'OriginalPassword123!',
         role: 'worker'
       });
+
+      _testEmailMock.clearSentEmails();
 
       const res = await request(app)
         .post('/api/auth/forgot-password')

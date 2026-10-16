@@ -58,6 +58,9 @@ describe('Phase Ten: Complete End-to-End User Journeys', () => {
       employerToken = reg.body.token;
       employerUser = reg.body.user;
 
+      // Verify email for end-to-end journey
+      await User.findByIdAndUpdate(employerUser.id, { emailVerified: true });
+
       const profileRes = await request(app)
         .get('/api/employers/me')
         .set('Authorization', `Bearer ${employerToken}`);
@@ -108,6 +111,9 @@ describe('Phase Ten: Complete End-to-End User Journeys', () => {
       expect(reg.status).toBe(201);
       workerToken = reg.body.token;
       workerUser = reg.body.user;
+
+      // Verify email for end-to-end journey
+      await User.findByIdAndUpdate(workerUser.id, { emailVerified: true });
 
       // Update worker profile
       const profUpdate = await request(app)

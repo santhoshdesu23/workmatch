@@ -21,16 +21,20 @@ export const EmployerSettingsPage: React.FC = () => {
   const [verificationType, setVerificationType] = useState('business_license');
   const [isSubmittingVerification, setIsSubmittingVerification] = useState(false);
 
+  const [emailSent, setEmailSent] = useState(false);
+
   const handleVerifyEmail = async () => {
     setVerifyingEmail(true);
     try {
-      const res = await api.post('/auth/verify-email');
+      const res = await api.post('/auth/resend-verification');
       if (res.data?.success) {
-        success('Email verified successfully!');
-        refreshUser();
+        setEmailSent(true);
+        success('Verification email sent! Please check your inbox and spam folder.');
+      } else {
+        toastError(res.data?.message || 'Could not send verification email.');
       }
     } catch (err: any) {
-      toastError(err.message);
+      toastError(err.message || 'Failed to dispatch verification email.');
     } finally {
       setVerifyingEmail(false);
     }
@@ -135,7 +139,7 @@ export const EmployerSettingsPage: React.FC = () => {
               isLoading={verifyingEmail}
               onClick={handleVerifyEmail}
             >
-              Verify Email Now
+              {emailSent ? 'Resend Verification Link' : 'Send Verification Email'}
             </Button>
           )}
         </div>

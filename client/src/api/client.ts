@@ -53,6 +53,7 @@ api.interceptors.response.use(
     const customErr: any = new Error(message);
     customErr.status = error.response?.status;
     customErr.data = error.response?.data;
+    customErr.code = error.response?.data?.code;
     return Promise.reject(customErr);
   }
 );

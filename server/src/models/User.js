@@ -43,6 +43,13 @@ const userSchema = new mongoose.Schema(
       enum: ['unverified', 'pending', 'verified', 'rejected'],
       default: 'unverified'
     },
+    emailVerificationToken: {
+      type: String,
+      index: true
+    },
+    emailVerificationExpires: {
+      type: Date
+    },
     lastLogin: {
       type: Date
     },

@@ -13,9 +13,13 @@ import {
   Sparkles,
   ShieldCheck,
   Building2,
-  Navigation
+  Navigation,
+  Mail,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 import api from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -23,7 +27,28 @@ import { Badge } from '../../components/common/Badge';
 
 export const CreateJobPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { success, error: toastError } = useToast();
+
+  const [isResendingVerify, setIsResendingVerify] = useState(false);
+  const [resendVerifySent, setResendVerifySent] = useState(false);
+
+  const handleResendVerification = async () => {
+    setIsResendingVerify(true);
+    try {
+      const res = await api.post('/auth/resend-verification');
+      if (res.data?.success) {
+        setResendVerifySent(true);
+        success('Verification email dispatched! Please check your inbox.');
+      } else {
+        toastError(res.data?.message || 'Failed to dispatch verification email.');
+      }
+    } catch (err: any) {
+      toastError(err.message || 'Failed to dispatch verification email.');
+    } finally {
+      setIsResendingVerify(false);
+    }
+  };
 
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -142,6 +167,11 @@ export const CreateJobPage: React.FC = () => {
   };
 
   const handlePublish = async () => {
+    if (user && !user.emailVerified) {
+      toastError('Email verification is required before you can publish shifts. Please verify your email address.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const skillsArray = requiredSkills.split(',').map((s) => s.trim()).filter(Boolean);
@@ -537,6 +567,38 @@ export const CreateJobPage: React.FC = () => {
               <div><strong>Dress Code:</strong> {dressCode}</div>
               <div><strong>Payment Terms:</strong> {paymentMethod} ({paymentTiming})</div>
             </div>
+
+            {user && !user.emailVerified && (
+              <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-2.5 mt-4">
+                <div className="flex items-center gap-2 font-bold text-sm text-amber-950">
+                  <Mail className="w-4 h-4 text-amber-700" />
+                  <span>Email Verification Required Before Publishing</span>
+                </div>
+                <p className="leading-relaxed">
+                  You cannot publish jobs to the marketplace until your employer email (<strong>{user.email}</strong>) is verified.
+                </p>
+                {resendVerifySent ? (
+                  <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Verification link dispatched! Please check your inbox.</span>
+                  </div>
+                ) : (
+                  <div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-amber-300 text-amber-900 hover:bg-amber-100"
+                      onClick={handleResendVerification}
+                      isLoading={isResendingVerify}
+                      leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+                    >
+                      Resend Verification Email
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </Card>
       )}
@@ -554,8 +616,15 @@ export const CreateJobPage: React.FC = () => {
             Continue
           </Button>
         ) : (
-          <Button type="button" size="sm" isLoading={isSubmitting} onClick={handlePublish} leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}>
-            Publish Shift to Marketplace
+          <Button
+            type="button"
+            size="sm"
+            disabled={Boolean(user && !user.emailVerified)}
+            isLoading={isSubmitting}
+            onClick={handlePublish}
+            leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
+          >
+            {user && !user.emailVerified ? 'Email Verification Required to Publish' : 'Publish Shift to Marketplace'}
           </Button>
         )}
       </div>

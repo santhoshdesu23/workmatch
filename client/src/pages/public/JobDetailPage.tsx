@@ -16,7 +16,9 @@ import {
   Flag,
   Send,
   Building2,
-  Bookmark
+  Bookmark,
+  Mail,
+  RefreshCw
 } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -49,6 +51,27 @@ export const JobDetailPage: React.FC = () => {
   const [reportDescription, setReportDescription] = useState('');
   const [isReporting, setIsReporting] = useState(false);
 
+  // Email verification resend state
+  const [isResendingVerify, setIsResendingVerify] = useState(false);
+  const [resendVerifySent, setResendVerifySent] = useState(false);
+
+  const handleResendVerification = async () => {
+    setIsResendingVerify(true);
+    try {
+      const res = await api.post('/auth/resend-verification');
+      if (res.data?.success) {
+        setResendVerifySent(true);
+        success('Verification email dispatched! Please check your inbox.');
+      } else {
+        toastError(res.data?.message || 'Failed to dispatch verification email.');
+      }
+    } catch (err: any) {
+      toastError(err.message || 'Failed to dispatch verification email.');
+    } finally {
+      setIsResendingVerify(false);
+    }
+  };
+
   const fetchJob = async () => {
     setLoading(true);
     try {
@@ -77,6 +100,11 @@ export const JobDetailPage: React.FC = () => {
 
     if (user.role !== 'worker') {
       toastError('Only worker accounts may apply to jobs.');
+      return;
+    }
+
+    if (!user.emailVerified) {
+      toastError('Email verification is required before you can apply to shifts. Please verify your email address.');
       return;
     }
 
@@ -444,7 +472,44 @@ export const JobDetailPage: React.FC = () => {
         title="Voluntary Shift Application"
         subtitle={`Submit voluntary application for: ${job.title}`}
       >
-        <form onSubmit={handleApplySubmit} className="space-y-4">
+        {user && !user.emailVerified ? (
+          <div className="space-y-4">
+            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-sm text-amber-950">
+                <Mail className="w-4 h-4 text-amber-700" />
+                <span>Email Verification Required</span>
+              </div>
+              <p className="leading-relaxed">
+                WorkMatch requires a verified email address before you can submit applications to shifts. A verification link was sent to <strong>{user.email}</strong>.
+              </p>
+              {resendVerifySent ? (
+                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold flex items-center gap-1.5 mt-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Fresh verification link dispatched! Please check your inbox.</span>
+                </div>
+              ) : (
+                <div className="pt-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-amber-300 text-amber-900 hover:bg-amber-100"
+                    onClick={handleResendVerification}
+                    isLoading={isResendingVerify}
+                    leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+                  >
+                    Resend Verification Link
+                  </Button>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end">
+              <Button variant="ghost" size="sm" onClick={() => setIsApplyModalOpen(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleApplySubmit} className="space-y-4">
           <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-900 space-y-1">
             <span className="font-bold block">Voluntary Application Guarantee:</span>
             <span>You are voluntarily choosing to apply. Notifications will never apply for you automatically. Employer reviews and confirms candidates.</span>
@@ -472,6 +537,7 @@ export const JobDetailPage: React.FC = () => {
             </Button>
           </div>
         </form>
+        )}
       </Modal>
 
       {/* Incident Report Modal */}

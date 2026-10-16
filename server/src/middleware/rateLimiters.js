@@ -66,6 +66,36 @@ export const authRateLimiter = rateLimit({
   }
 });
 
+let testVerificationLimit = null;
+export const _setTestVerificationLimit = (limit) => {
+  testVerificationLimit = limit;
+};
+
+export const _resetVerificationRateLimiter = () => {
+  if (verificationRateLimiter && typeof verificationRateLimiter.resetKey === 'function') {
+    verificationRateLimiter.resetKey('127.0.0.1');
+    verificationRateLimiter.resetKey('::1');
+    verificationRateLimiter.resetKey('::ffff:127.0.0.1');
+  }
+};
+
+// Email verification request limiter (prevents flooding verification dispatches)
+export const verificationRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: (req, res) => {
+    if (testVerificationLimit !== null) return testVerificationLimit;
+    return isTest ? 1000 : 5; // 5 requests per 15 minutes
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: resolveClientIp,
+  store: sharedStore,
+  message: {
+    success: false,
+    message: 'Too many verification requests. Please wait a few minutes before requesting another verification email.'
+  }
+});
+
 // AI recommendation and search query limiter (protects against AI provider quota/cost exhaustion)
 export const aiRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute

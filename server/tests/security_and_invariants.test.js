@@ -64,6 +64,12 @@ describe('WorkMatch Security Audit & Invariants Test Suite', () => {
     employer2Token = e2Res.body.token;
     employer2User = e2Res.body.user;
 
+    // Verify test accounts so standard business logic tests can proceed
+    await User.updateMany(
+      { _id: { $in: [workerUser.id, worker2User.id, employerUser.id, employer2User.id] } },
+      { $set: { emailVerified: true } }
+    );
+
     // 5. Create an authorized Administrator directly (not via public registration)
     const admin = await User.create({
       name: 'Platform Overseer Admin',

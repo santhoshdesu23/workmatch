@@ -117,3 +117,40 @@ export const optionalAuth = async (req, res, next) => {
   }
   next();
 };
+
+/**
+ * Guard requiring that the authenticated user has verified their email address.
+ * Strictly queries the fresh database record to prevent bypassing via stale JWT tokens.
+ */
+export const requireEmailVerified = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required.'
+      });
+    }
+
+    // Always fetch fresh user record from database
+    const freshUser = await User.findById(req.user._id);
+    if (!freshUser) {
+      return res.status(401).json({
+        success: false,
+        message: 'Account not found.'
+      });
+    }
+
+    if (!freshUser.emailVerified) {
+      return res.status(403).json({
+        success: false,
+        code: 'EMAIL_VERIFICATION_REQUIRED',
+        message: 'Email verification is required before performing this action. Please verify your email address.'
+      });
+    }
+
+    req.user = freshUser;
+    next();
+  } catch (err) {
+    next(err);
+  }
+};

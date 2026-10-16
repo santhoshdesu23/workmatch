@@ -2,6 +2,7 @@ import { Job } from '../models/Job.js';
 import { WorkerProfile } from '../models/WorkerProfile.js';
 import { EmployerProfile } from '../models/EmployerProfile.js';
 import { Application } from '../models/Application.js';
+import { User } from '../models/User.js';
 import { JOB_STATUSES, ROLES } from '../config/constants.js';
 import { computeJobMatch, calculateDistanceKm } from '../services/matchingService.js';
 import { createNotification } from '../services/notificationService.js';
@@ -205,6 +206,17 @@ export const getJobById = async (req, res, next) => {
 export const createJob = async (req, res, next) => {
   try {
     const employerId = req.user._id;
+
+    // Enforce mandatory email verification for employers before creating jobs
+    const employer = await User.findById(employerId);
+    if (!employer || (!employer.emailVerified && employer.role !== ROLES.ADMIN)) {
+      return res.status(403).json({
+        success: false,
+        code: 'EMAIL_VERIFICATION_REQUIRED',
+        message: 'Email verification is required before you can post jobs. Please verify your email address.'
+      });
+    }
+
     const {
       title,
       description,
@@ -289,6 +301,16 @@ export const updateJob = async (req, res, next) => {
 
     if (job.employer.toString() !== req.user._id.toString() && req.user.role !== ROLES.ADMIN) {
       return res.status(403).json({ success: false, message: 'You are not authorized to edit this job.' });
+    }
+
+    // Unverified employers cannot edit or publish jobs
+    const employer = await User.findById(req.user._id);
+    if (!employer || (!employer.emailVerified && employer.role !== ROLES.ADMIN)) {
+      return res.status(403).json({
+        success: false,
+        code: 'EMAIL_VERIFICATION_REQUIRED',
+        message: 'Email verification is required before you can edit or publish jobs. Please verify your email address.'
+      });
     }
 
     const updates = { ...req.body };

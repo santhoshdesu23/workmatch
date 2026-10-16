@@ -4,6 +4,7 @@ import { WorkerProfile } from '../models/WorkerProfile.js';
 import { EmployerProfile } from '../models/EmployerProfile.js';
 import { Assignment } from '../models/Assignment.js';
 import { PaymentRecord } from '../models/PaymentRecord.js';
+import { User } from '../models/User.js';
 import { APPLICATION_STATUSES, ASSIGNMENT_STATUSES, JOB_STATUSES, PAYMENT_STATUSES, ROLES } from '../config/constants.js';
 import { computeJobMatch } from '../services/matchingService.js';
 import { createNotification } from '../services/notificationService.js';
@@ -14,6 +15,16 @@ export const applyToJob = async (req, res, next) => {
     const { jobId } = req.params;
     const workerId = req.user._id;
     const { message = '' } = req.body;
+
+    // Enforce mandatory email verification for workers before applying
+    const worker = await User.findById(workerId);
+    if (!worker || !worker.emailVerified) {
+      return res.status(403).json({
+        success: false,
+        code: 'EMAIL_VERIFICATION_REQUIRED',
+        message: 'Email verification is required before you can apply to shifts. Please verify your email address.'
+      });
+    }
 
     const job = await Job.findById(jobId);
     if (!job) {

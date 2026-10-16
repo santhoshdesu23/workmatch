@@ -23,7 +23,8 @@ export const getMyEmployerProfile = async (req, res, next) => {
         id: req.user._id,
         name: req.user.name,
         email: req.user.email,
-        verificationStatus: req.user.verificationStatus
+        verificationStatus: req.user.verificationStatus,
+        emailVerified: req.user.emailVerified
       }
     });
   } catch (error) {

@@ -15,6 +15,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { Navbar } from '../common/Navbar';
+import { EmailVerificationBanner } from '../common/EmailVerificationBanner';
 
 export const WorkerLayout: React.FC = () => {
   const navItems = [
@@ -77,6 +78,7 @@ export const WorkerLayout: React.FC = () => {
 
         {/* Content Outlet */}
         <main className="flex-1 min-w-0">
+          <EmailVerificationBanner />
           <Outlet />
         </main>
       </div>

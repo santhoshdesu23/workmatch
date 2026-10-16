@@ -4,12 +4,15 @@ import app from '../src/app.js';
 import { connectDB, disconnectDB } from '../src/config/db.js';
 import { computeJobMatch, calculateDistanceKm } from '../src/services/matchingService.js';
 import { aiExplanationService } from '../src/services/aiExplanationService.js';
+import { User } from '../src/models/User.js';
 
 describe('WorkMatch Core API & Matching Engine Test Suite', () => {
   let workerToken;
   let employerToken;
   let workerId;
   let testJobId;
+  const testWorkerEmail = `test.worker.${Date.now()}@example.com`;
+  const testEmployerEmail = `test.employer.${Date.now()}@example.com`;
 
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
@@ -30,9 +33,6 @@ describe('WorkMatch Core API & Matching Engine Test Suite', () => {
   });
 
   describe('Authentication & Authorization', () => {
-    const testWorkerEmail = `test.worker.${Date.now()}@example.com`;
-    const testEmployerEmail = `test.employer.${Date.now()}@example.com`;
-
     it('should register a new worker account', async () => {
       const res = await request(app).post('/api/auth/register').send({
         name: 'Unit Test Worker',
@@ -101,6 +101,13 @@ describe('WorkMatch Core API & Matching Engine Test Suite', () => {
   });
 
   describe('Jobs Marketplace Lifecycle', () => {
+    beforeAll(async () => {
+      await User.updateMany(
+        { email: { $in: [testWorkerEmail, testEmployerEmail] } },
+        { $set: { emailVerified: true } }
+      );
+    });
+
     it('employer should create a new temporary job', async () => {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 2);

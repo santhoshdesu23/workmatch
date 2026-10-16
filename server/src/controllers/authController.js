@@ -6,7 +6,7 @@ import { EmployerProfile } from '../models/EmployerProfile.js';
 import { VerificationRequest } from '../models/VerificationRequest.js';
 import { ROLES } from '../config/constants.js';
 import { signToken } from '../config/jwt.js';
-import { sendPasswordResetEmail } from '../services/emailService.js';
+import { sendPasswordResetEmail, sendVerificationEmail } from '../services/emailService.js';
 
 const ALLOWED_REGISTRATION_ROLES = [ROLES.WORKER, ROLES.EMPLOYER];
 
@@ -65,12 +65,20 @@ export const register = async (req, res, next) => {
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(password, salt);
 
+    // Generate cryptographically secure verification token
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const hashedVerificationToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
+    const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
     const user = await User.create({
       name: name.trim(),
       email: normalizedEmail,
       passwordHash,
       role,
-      passwordChangedAt: new Date()
+      passwordChangedAt: new Date(),
+      emailVerified: false,
+      emailVerificationToken: hashedVerificationToken,
+      emailVerificationExpires
     });
 
     // Create appropriate profile
@@ -88,11 +96,24 @@ export const register = async (req, res, next) => {
       });
     }
 
+    // Safely dispatch verification email
+    const emailResult = await sendVerificationEmail({
+      to: user.email,
+      verificationToken,
+      userName: user.name
+    });
+
+    if (!emailResult.success) {
+      console.error(`[Auth] Verification email dispatch failed for user ${user._id}: ${emailResult.error}`);
+    }
+
+    const canExposeDevVerificationToken = process.env.NODE_ENV !== 'production' && (process.env.EMAIL_PROVIDER || '').toLowerCase() !== 'resend';
+
     const token = signToken({ id: user._id, role: user.role, tokenVersion: user.tokenVersion || 0 });
 
     res.status(201).json({
       success: true,
-      message: 'Account registered successfully.',
+      message: 'Account registered successfully. Please check your email to verify your account.',
       token,
       user: {
         id: user._id,
@@ -102,7 +123,8 @@ export const register = async (req, res, next) => {
         emailVerified: user.emailVerified,
         verificationStatus: user.verificationStatus,
         profile
-      }
+      },
+      ...(canExposeDevVerificationToken ? { devVerificationToken: verificationToken } : {})
     });
   } catch (error) {
     next(error);
@@ -354,16 +376,90 @@ export const changePassword = async (req, res, next) => {
 
 export const verifyEmail = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found.' });
+    const rawToken = req.body?.token || req.query?.token;
+    if (!rawToken || typeof rawToken !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Verification token is required.'
+      });
     }
+
+    const hashedToken = crypto.createHash('sha256').update(rawToken.trim()).digest('hex');
+    const user = await User.findOne({
+      emailVerificationToken: hashedToken,
+      emailVerificationExpires: { $gt: new Date() }
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email verification token is invalid or has expired.'
+      });
+    }
+
     user.emailVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpires = undefined;
     await user.save();
 
     res.status(200).json({
       success: true,
-      message: 'Email verified successfully.'
+      message: 'Email verified successfully! You can now apply for shifts and publish job listings.'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resendVerification = async (req, res, next) => {
+  try {
+    let targetUser = null;
+
+    if (req.user && req.user._id) {
+      targetUser = await User.findById(req.user._id);
+    } else if (req.body?.email) {
+      const normalizedEmail = String(req.body.email).toLowerCase().trim();
+      targetUser = await User.findOne({ email: normalizedEmail });
+    }
+
+    let verificationToken = null;
+
+    if (targetUser) {
+      if (targetUser.emailVerified) {
+        if (req.user) {
+          return res.status(200).json({
+            success: true,
+            message: 'Your email address is already verified.'
+          });
+        }
+        // If unauthenticated caller provided an already-verified email, fall through to generic response
+      } else {
+        verificationToken = crypto.randomBytes(32).toString('hex');
+        const hashedToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
+
+        targetUser.emailVerificationToken = hashedToken;
+        targetUser.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        await targetUser.save();
+
+        const emailResult = await sendVerificationEmail({
+          to: targetUser.email,
+          verificationToken,
+          userName: targetUser.name
+        });
+
+        if (!emailResult.success) {
+          console.error(`[Auth] Resend verification email dispatch failed for user ${targetUser._id}: ${emailResult.error}`);
+        }
+      }
+    }
+
+    const canExposeDevVerificationToken = process.env.NODE_ENV !== 'production' && (process.env.EMAIL_PROVIDER || '').toLowerCase() !== 'resend';
+
+    // Generic response prevents account enumeration
+    res.status(200).json({
+      success: true,
+      message: 'If an unverified account is associated with this email address, verification instructions have been dispatched.',
+      ...(canExposeDevVerificationToken && verificationToken ? { devVerificationToken: verificationToken } : {})
     });
   } catch (error) {
     next(error);
