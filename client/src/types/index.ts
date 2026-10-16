@@ -234,6 +234,9 @@ export interface PaymentRecord {
   expectedDate?: string;
   paymentMethod: string;
   providerReference?: string;
+  verificationSource?: 'employer_recorded' | 'worker_confirmed' | 'provider_verified';
+  workerConfirmedReceipt?: boolean;
+  workerConfirmedReceiptAt?: string;
   notes?: string;
   history?: Array<{
     status: string;
@@ -244,6 +247,8 @@ export interface PaymentRecord {
   createdAt: string;
   updatedAt: string;
 }
+
+export type PaymentRecordItem = PaymentRecord;
 
 export interface Review {
   _id: string;

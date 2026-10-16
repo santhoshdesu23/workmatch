@@ -53,41 +53,43 @@ export const Navbar: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80">
-      {/* Top Demo Bar for Reviewers & Evaluators */}
-      <div className="bg-slate-900 text-slate-200 text-xs py-1.5 px-4 hidden sm:flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span className="font-medium text-slate-300">Live Demo Mode Active</span>
-          <span className="text-slate-500">|</span>
-          <span className="text-slate-400">Instant Role Switcher:</span>
+      {/* Top Demo Bar for Reviewers & Evaluators (Available in development & preview) */}
+      {(!import.meta.env.PROD || import.meta.env.VITE_ENABLE_DEMO_SHORTCUTS === 'true') && (
+        <div className="bg-slate-900 text-slate-200 text-xs py-1.5 px-4 hidden sm:flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="font-medium text-slate-300">Evaluation Sandbox Mode</span>
+            <span className="text-slate-500">|</span>
+            <span className="text-slate-400">Instant Role Switcher:</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleDemoSwitch('worker')}
+              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white transition-colors cursor-pointer"
+            >
+              Worker (Alex)
+            </button>
+            <button
+              onClick={() => handleDemoSwitch('worker2')}
+              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white transition-colors cursor-pointer"
+            >
+              Worker (Jordan)
+            </button>
+            <button
+              onClick={() => handleDemoSwitch('employer')}
+              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white transition-colors cursor-pointer"
+            >
+              Employer (Apex Staffing)
+            </button>
+            <button
+              onClick={() => handleDemoSwitch('admin')}
+              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-amber-600 text-slate-200 hover:text-white transition-colors cursor-pointer"
+            >
+              Administrator
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => handleDemoSwitch('worker')}
-            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white transition-colors cursor-pointer"
-          >
-            Worker (Alex)
-          </button>
-          <button
-            onClick={() => handleDemoSwitch('worker2')}
-            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white transition-colors cursor-pointer"
-          >
-            Worker (Jordan)
-          </button>
-          <button
-            onClick={() => handleDemoSwitch('employer')}
-            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-emerald-600 text-slate-200 hover:text-white transition-colors cursor-pointer"
-          >
-            Employer (Apex Staffing)
-          </button>
-          <button
-            onClick={() => handleDemoSwitch('admin')}
-            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-amber-600 text-slate-200 hover:text-white transition-colors cursor-pointer"
-          >
-            Administrator
-          </button>
-        </div>
-      </div>
+      )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">

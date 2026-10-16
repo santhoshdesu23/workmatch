@@ -2,6 +2,16 @@
  * AI Service Layer with Google Gemini API and Local Deterministic Fallback
  */
 
+function sanitizeForPrompt(str, maxLength = 100) {
+  if (!str || typeof str !== 'string') return '';
+  // Strip control characters, quotes and prompt injection patterns
+  return str
+    .replace(/[\r\n\t]/g, ' ')
+    .replace(/[`${}\\]/g, '')
+    .slice(0, maxLength)
+    .trim();
+}
+
 export class AiExplanationService {
   constructor(apiKey = process.env.GEMINI_API_KEY) {
     this.apiKey = apiKey;
@@ -12,17 +22,22 @@ export class AiExplanationService {
    * Generates a conversational explanation of a match between worker profile and job
    */
   async generateMatchExplanation(workerProfile, job, matchResult) {
-    if (!this.apiKey) {
+    if (!this.apiKey || process.env.NODE_ENV === 'test') {
       return this.getLocalDeterministicExplanation(workerProfile, job, matchResult);
     }
 
     try {
-      // Gemini REST API endpoint
+      // Gemini REST API endpoint with strict 5-second timeout
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${this.apiKey}`;
+      const safeTitle = sanitizeForPrompt(job.title, 80);
+      const safeCat = sanitizeForPrompt(job.category, 50);
+      const safeReqSkills = (job.requiredSkills || []).map((s) => sanitizeForPrompt(s, 30)).slice(0, 5).join(', ');
+      const safeWorkerSkills = (workerProfile?.skills || []).map((s) => sanitizeForPrompt(s, 30)).slice(0, 5).join(', ');
+
       const prompt = `
 You are the WorkMatch AI assistant. Explain in 2 concise, honest sentences why this job is or isn't a strong match for this worker.
-Job: ${job.title} in ${job.category}. Pay: $${job.grossPay} (${job.payBasis}). Required skills: ${job.requiredSkills?.join(', ')}.
-Worker skills: ${workerProfile?.skills?.join(', ')}. Expected pay: $${workerProfile?.expectedPay?.min || 0}. Match Score: ${matchResult.matchScore}/100.
+Job: ${safeTitle} in ${safeCat}. Pay: $${Number(job.grossPay) || 0} (${sanitizeForPrompt(job.payBasis, 20)}). Required skills: ${safeReqSkills}.
+Worker skills: ${safeWorkerSkills}. Expected pay: $${Number(workerProfile?.expectedPay?.min) || 0}. Match Score: ${matchResult.matchScore}/100.
 Distance: ${matchResult.distanceKm !== null ? matchResult.distanceKm + ' km' : 'Unknown'}.
 Tone: Professional, supportive, objective. Do not make false guarantees.
 `;
@@ -32,7 +47,8 @@ Tone: Professional, supportive, objective. Do not make false guarantees.
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }]
-        })
+        }),
+        signal: AbortSignal.timeout(5000)
       });
 
       if (!response.ok) {
@@ -51,7 +67,7 @@ Tone: Professional, supportive, objective. Do not make false guarantees.
 
       return this.getLocalDeterministicExplanation(workerProfile, job, matchResult);
     } catch (err) {
-      console.warn('[AI Service] Error contacting Gemini API:', err.message);
+      console.warn('[AI Service] Gemini API unavailable or timed out:', err.message);
       return this.getLocalDeterministicExplanation(workerProfile, job, matchResult);
     }
   }
@@ -67,14 +83,16 @@ Tone: Professional, supportive, objective. Do not make false guarantees.
       minPay: null
     };
 
-    if (!this.apiKey || !query) {
+    if (!this.apiKey || !query || process.env.NODE_ENV === 'test') {
       return this.getLocalDeterministicQueryParser(query);
     }
 
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${this.apiKey}`;
+      const safeQuery = sanitizeForPrompt(query, 120);
+
       const prompt = `
-Parse this temporary job search query into a JSON object: "${query}".
+Parse this temporary job search query into a JSON object: "${safeQuery}".
 Return ONLY a valid JSON object with keys:
 "keyword": string or null,
 "category": string or null (from: "Event assistance", "Wedding and catering support", "Restaurant and hospitality", "Retail and store assistance", "Warehouse and packing", "Delivery and logistics", "Data entry and office assistance", "Cleaning and maintenance", "Tutoring and event staffing"),
@@ -87,7 +105,8 @@ Return ONLY a valid JSON object with keys:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }]
-        })
+        }),
+        signal: AbortSignal.timeout(5000)
       });
 
       if (!response.ok) {

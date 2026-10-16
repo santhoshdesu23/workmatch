@@ -104,13 +104,16 @@ export const RegisterPage: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+            <label htmlFor="register-name" className="block text-xs font-semibold text-slate-700 mb-1.5">
               {role === 'employer' ? 'Contact Representative Name' : 'Full Legal Name'}
             </label>
             <div className="relative">
               <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
               <input
+                id="register-name"
+                name="name"
                 type="text"
+                autoComplete="name"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -122,11 +125,14 @@ export const RegisterPage: React.FC = () => {
 
           {role === 'employer' && (
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Business / Organization Name</label>
+              <label htmlFor="register-business-name" className="block text-xs font-semibold text-slate-700 mb-1.5">Business / Organization Name</label>
               <div className="relative">
                 <Building2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
+                  id="register-business-name"
+                  name="businessName"
                   type="text"
+                  autoComplete="organization"
                   required
                   value={businessName}
                   onChange={(e) => setBusinessName(e.target.value)}
@@ -138,11 +144,14 @@ export const RegisterPage: React.FC = () => {
           )}
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Email Address</label>
+            <label htmlFor="register-email" className="block text-xs font-semibold text-slate-700 mb-1.5">Email Address</label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
               <input
+                id="register-email"
+                name="email"
                 type="email"
+                autoComplete="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -153,11 +162,14 @@ export const RegisterPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Password</label>
+            <label htmlFor="register-password" className="block text-xs font-semibold text-slate-700 mb-1.5">Password</label>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
               <input
+                id="register-password"
+                name="password"
                 type="password"
+                autoComplete="new-password"
                 required
                 minLength={8}
                 value={password}

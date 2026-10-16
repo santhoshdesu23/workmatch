@@ -4,22 +4,30 @@ import { MATCH_WEIGHTS } from '../config/constants.js';
  * Calculates great-circle distance between two coordinates in kilometers using Haversine formula
  */
 export function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+  const nLat1 = Number(lat1);
+  const nLon1 = Number(lon1);
+  const nLat2 = Number(lat2);
+  const nLon2 = Number(lon2);
+
   if (
     lat1 === undefined || lon1 === undefined ||
     lat2 === undefined || lon2 === undefined ||
-    (lat1 === 0 && lon1 === 0) ||
-    (lat2 === 0 && lon2 === 0)
+    isNaN(nLat1) || isNaN(nLon1) || isNaN(nLat2) || isNaN(nLon2) ||
+    nLat1 < -90 || nLat1 > 90 || nLat2 < -90 || nLat2 > 90 ||
+    nLon1 < -180 || nLon1 > 180 || nLon2 < -180 || nLon2 > 180 ||
+    (nLat1 === 0 && nLon1 === 0) ||
+    (nLat2 === 0 && nLon2 === 0)
   ) {
     return null;
   }
 
   const R = 6371; // Earth radius in kilometers
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const dLat = ((nLat2 - nLat1) * Math.PI) / 180;
+  const dLon = ((nLon2 - nLon1) * Math.PI) / 180;
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
+    Math.cos((nLat1 * Math.PI) / 180) *
+      Math.cos((nLat2 * Math.PI) / 180) *
       Math.sin(dLon / 2) *
       Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
@@ -30,6 +38,7 @@ export function calculateDistanceKm(lat1, lon1, lat2, lon2) {
  * Normalizes text for skill comparison
  */
 function normalizeSkill(str) {
+  if (!str || typeof str !== 'string') return '';
   return str.toLowerCase().replace(/[^a-z0-9]/g, ' ').trim();
 }
 
@@ -37,7 +46,10 @@ function normalizeSkill(str) {
  * Evaluates skill matching
  */
 export function evaluateSkillsScore(workerSkills = [], requiredSkills = []) {
-  if (!requiredSkills || requiredSkills.length === 0) {
+  const safeRequired = Array.isArray(requiredSkills) ? requiredSkills.filter(Boolean) : [];
+  const safeWorker = Array.isArray(workerSkills) ? workerSkills.filter(Boolean) : [];
+
+  if (safeRequired.length === 0) {
     return {
       score: 1.0,
       matchedSkills: [],
@@ -46,20 +58,20 @@ export function evaluateSkillsScore(workerSkills = [], requiredSkills = []) {
     };
   }
 
-  if (!workerSkills || workerSkills.length === 0) {
+  if (safeWorker.length === 0) {
     return {
       score: 0.1, // Minimum floor for no skills declared
       matchedSkills: [],
-      missingSkills: requiredSkills,
+      missingSkills: safeRequired,
       explanation: 'Add your skills to your profile to improve matching accuracy.'
     };
   }
 
-  const normalizedWorkerSkills = workerSkills.map(normalizeSkill);
+  const normalizedWorkerSkills = safeWorker.map(normalizeSkill);
   const matched = [];
   const missing = [];
 
-  for (const req of requiredSkills) {
+  for (const req of safeRequired) {
     const normReq = normalizeSkill(req);
     const hasMatch = normalizedWorkerSkills.some(
       (w) => w === normReq || w.includes(normReq) || normReq.includes(w)
@@ -71,9 +83,9 @@ export function evaluateSkillsScore(workerSkills = [], requiredSkills = []) {
     }
   }
 
-  const score = matched.length / requiredSkills.length;
-  const explanation = `${matched.length} of ${requiredSkills.length} required skill${
-    requiredSkills.length === 1 ? '' : 's'
+  const score = matched.length / safeRequired.length;
+  const explanation = `${matched.length} of ${safeRequired.length} required skill${
+    safeRequired.length === 1 ? '' : 's'
   } match your profile.`;
 
   return {
@@ -88,16 +100,20 @@ export function evaluateSkillsScore(workerSkills = [], requiredSkills = []) {
  * Evaluates location compatibility
  */
 export function evaluateLocationScore(workerLocation, jobLocation, travelRadiusKm = 25) {
+  const radius = Number(travelRadiusKm) > 0 ? Number(travelRadiusKm) : 25;
+
   if (
     !workerLocation?.coordinates ||
     !jobLocation?.coordinates ||
-    (workerLocation.coordinates[0] === 0 && workerLocation.coordinates[1] === 0) ||
-    (jobLocation.coordinates[0] === 0 && jobLocation.coordinates[1] === 0)
+    !Array.isArray(workerLocation.coordinates) ||
+    !Array.isArray(jobLocation.coordinates) ||
+    workerLocation.coordinates.length < 2 ||
+    jobLocation.coordinates.length < 2
   ) {
     return {
       score: 0.5,
       distanceKm: null,
-      explanation: 'Distance unknown (approximate or uncalibrated coordinates). Location compatibility estimated.'
+      explanation: 'Distance unknown (coordinates not calibrated). Location compatibility estimated.'
     };
   }
 
@@ -109,26 +125,26 @@ export function evaluateLocationScore(workerLocation, jobLocation, travelRadiusK
     return {
       score: 0.5,
       distanceKm: null,
-      explanation: 'Distance could not be calculated.'
+      explanation: 'Distance could not be calculated from coordinates.'
     };
   }
 
-  if (distance <= travelRadiusKm) {
+  if (distance <= radius) {
     // Linear scaling within travel radius from 1.0 down to 0.7
-    const score = Math.max(0.7, 1.0 - (0.3 * distance) / travelRadiusKm);
+    const score = Math.max(0.7, 1.0 - (0.3 * distance) / radius);
     return {
       score,
       distanceKm: distance,
-      explanation: `Located ~${distance} km away, comfortably within your ${travelRadiusKm} km travel radius.`
+      explanation: `Located ~${distance} km away, comfortably within your ${radius} km travel radius.`
     };
   } else {
     // Outside travel radius: degraded score
-    const excess = distance - travelRadiusKm;
-    const score = Math.max(0.1, 0.7 - (0.6 * excess) / travelRadiusKm);
+    const excess = distance - radius;
+    const score = Math.max(0.1, 0.7 - (0.6 * excess) / radius);
     return {
       score,
       distanceKm: distance,
-      explanation: `Located ~${distance} km away, exceeding your preferred ${travelRadiusKm} km radius.`
+      explanation: `Located ~${distance} km away, exceeding your preferred ${radius} km radius.`
     };
   }
 }
@@ -144,20 +160,33 @@ export function evaluateAvailabilityScore(workerAvailability, jobDate, jobStartT
     };
   }
 
+  if (!jobDate) {
+    return {
+      score: 0.5,
+      explanation: 'Job work date unspecified.'
+    };
+  }
+
   const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const workDateObj = new Date(jobDate);
-  const dayName = daysOfWeek[workDateObj.getUTCDay()];
+  if (isNaN(workDateObj.getTime())) {
+    return {
+      score: 0.5,
+      explanation: 'Job schedule date is pending confirmation.'
+    };
+  }
 
-  const workerDays = workerAvailability.days || [];
+  const dayName = daysOfWeek[workDateObj.getUTCDay()];
+  const workerDays = Array.isArray(workerAvailability.days) ? workerAvailability.days : [];
   const dayMatches = workerDays.length === 0 || workerDays.includes(dayName);
 
   // Time slot estimation
   let slot = 'Morning';
-  const hour = parseInt(jobStartTime?.split(':')[0] || '9', 10);
+  const hour = parseInt(String(jobStartTime || '9').split(':')[0] || '9', 10);
   if (hour >= 12 && hour < 17) slot = 'Afternoon';
   else if (hour >= 17) slot = 'Evening';
 
-  const workerSlots = workerAvailability.timeSlots || [];
+  const workerSlots = Array.isArray(workerAvailability.timeSlots) ? workerAvailability.timeSlots : [];
   const slotMatches = workerSlots.length === 0 || workerSlots.includes(slot);
 
   if (dayMatches && slotMatches) {
@@ -182,6 +211,9 @@ export function evaluateAvailabilityScore(workerAvailability, jobDate, jobStartT
  * Evaluates payment compatibility
  */
 export function evaluatePaymentScore(expectedPay, jobGrossPay, jobPayBasis, jobHours = 1) {
+  const pay = Number(jobGrossPay) || 0;
+  const hours = Number(jobHours) > 0 ? Number(jobHours) : 1;
+
   if (!expectedPay || (!expectedPay.min && !expectedPay.max)) {
     return {
       score: 0.8,
@@ -189,13 +221,12 @@ export function evaluatePaymentScore(expectedPay, jobGrossPay, jobPayBasis, jobH
     };
   }
 
-  // Normalize job rate to hourly equivalent for standard comparison if feasible
-  let effectiveJobHourly = jobGrossPay;
+  let effectiveJobHourly = pay;
   if (jobPayBasis === 'daily' || jobPayBasis === 'shift') {
-    effectiveJobHourly = jobHours > 0 ? jobGrossPay / jobHours : jobGrossPay / 8;
+    effectiveJobHourly = hours > 0 ? pay / hours : pay / 8;
   }
 
-  let effectiveExpectedHourly = expectedPay.min || 0;
+  let effectiveExpectedHourly = Number(expectedPay.min) || 0;
   if (expectedPay.basis === 'daily' || expectedPay.basis === 'shift') {
     effectiveExpectedHourly = effectiveExpectedHourly / 8;
   }
@@ -203,21 +234,21 @@ export function evaluatePaymentScore(expectedPay, jobGrossPay, jobPayBasis, jobH
   if (effectiveExpectedHourly <= 0) {
     return {
       score: 1.0,
-      explanation: `Offered rate of $${jobGrossPay} (${jobPayBasis}) matches your compensation criteria.`
+      explanation: `Offered rate of $${pay} (${jobPayBasis || 'hourly'}) matches your compensation criteria.`
     };
   }
 
   if (effectiveJobHourly >= effectiveExpectedHourly) {
     return {
       score: 1.0,
-      explanation: `Offered pay ($${jobGrossPay} / ${jobPayBasis}) meets or exceeds your minimum requirement.`
+      explanation: `Offered pay ($${pay} / ${jobPayBasis || 'hourly'}) meets or exceeds your minimum requirement.`
     };
   } else {
     const ratio = effectiveJobHourly / effectiveExpectedHourly;
-    const score = Math.max(0.2, ratio);
+    const score = Math.max(0.2, Math.min(0.99, ratio));
     return {
       score,
-      explanation: `Offered rate ($${jobGrossPay} / ${jobPayBasis}) is slightly below your target rate.`
+      explanation: `Offered rate ($${pay} / ${jobPayBasis || 'hourly'}) is slightly below your target rate.`
     };
   }
 }
@@ -225,21 +256,27 @@ export function evaluatePaymentScore(expectedPay, jobGrossPay, jobPayBasis, jobH
 /**
  * Evaluates category and experience compatibility
  */
-export function evaluateCategoryScore(preferredCategories = [], jobCategory, experienceSummary = '') {
-  let score = 0.5;
-  const matchedCat = preferredCategories.some(
-    (c) => c.toLowerCase() === jobCategory.toLowerCase()
+export function evaluateCategoryScore(preferredCategories = [], jobCategory = '', experienceSummary = '') {
+  if (!jobCategory) {
+    return {
+      score: 0.5,
+      explanation: 'General temporary work opportunity.'
+    };
+  }
+
+  const safePreferred = Array.isArray(preferredCategories) ? preferredCategories : [];
+  const matchedCat = safePreferred.some(
+    (c) => typeof c === 'string' && c.toLowerCase() === jobCategory.toLowerCase()
   );
 
   if (matchedCat) {
-    score = 1.0;
     return {
-      score,
+      score: 1.0,
       explanation: `Direct match with your preferred category "${jobCategory}".`
     };
   }
 
-  if (preferredCategories.length === 0) {
+  if (safePreferred.length === 0) {
     return {
       score: 0.7,
       explanation: `Job in "${jobCategory}". Open category preferences recorded.`
@@ -274,11 +311,12 @@ export function calculateProfileCompleteness(profile) {
  * Main explainable matching engine
  */
 export function computeJobMatch(workerProfile, job) {
-  const skillsRes = evaluateSkillsScore(workerProfile?.skills, job.requiredSkills);
-  const locationRes = evaluateLocationScore(workerProfile?.location, job.location, workerProfile?.travelRadiusKm || 25);
-  const availRes = evaluateAvailabilityScore(workerProfile?.availability, job.workDate, job.startTime);
-  const payRes = evaluatePaymentScore(workerProfile?.expectedPay, job.grossPay, job.payBasis, job.totalHours);
-  const catRes = evaluateCategoryScore(workerProfile?.preferredCategories, job.category, workerProfile?.experienceSummary);
+  const safeJob = job || {};
+  const skillsRes = evaluateSkillsScore(workerProfile?.skills, safeJob.requiredSkills);
+  const locationRes = evaluateLocationScore(workerProfile?.location, safeJob.location, workerProfile?.travelRadiusKm || 25);
+  const availRes = evaluateAvailabilityScore(workerProfile?.availability, safeJob.workDate, safeJob.startTime);
+  const payRes = evaluatePaymentScore(workerProfile?.expectedPay, safeJob.grossPay, safeJob.payBasis, safeJob.totalHours);
+  const catRes = evaluateCategoryScore(workerProfile?.preferredCategories, safeJob.category, workerProfile?.experienceSummary);
 
   const rawScore =
     MATCH_WEIGHTS.SKILLS * skillsRes.score +
@@ -305,7 +343,7 @@ export function computeJobMatch(workerProfile, job) {
   if (!workerProfile?.location?.coordinates || (workerProfile.location.coordinates[0] === 0 && workerProfile.location.coordinates[1] === 0)) {
     warnings.push('Worker location is approximate or not set; distance score estimated.');
   }
-  if (job.ageRestriction && job.ageRestriction.includes('18+')) {
+  if (safeJob.ageRestriction && safeJob.ageRestriction.includes('18+')) {
     warnings.push('Candidate must meet minimum 18+ age requirement.');
   }
 

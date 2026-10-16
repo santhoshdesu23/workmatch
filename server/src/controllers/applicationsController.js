@@ -7,6 +7,7 @@ import { PaymentRecord } from '../models/PaymentRecord.js';
 import { APPLICATION_STATUSES, ASSIGNMENT_STATUSES, JOB_STATUSES, PAYMENT_STATUSES, ROLES } from '../config/constants.js';
 import { computeJobMatch } from '../services/matchingService.js';
 import { createNotification } from '../services/notificationService.js';
+import { getShiftInterval, shiftsOverlap } from '../utils/scheduleUtils.js';
 
 export const applyToJob = async (req, res, next) => {
   try {
@@ -31,7 +32,7 @@ export const applyToJob = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'All openings for this job are currently filled.' });
     }
 
-    // Check duplicate
+    // Check duplicate application
     const existing = await Application.findOne({ job: jobId, worker: workerId });
     if (existing) {
       return res.status(409).json({
@@ -40,11 +41,48 @@ export const applyToJob = async (req, res, next) => {
       });
     }
 
+    // Check schedule conflicts using true shift-interval overlap detection
+    const targetInterval = getShiftInterval(job.workDate, job.startTime, job.endTime);
+
+    // Look for active assignments within ±2 days (to account for overnight shifts & timezone boundaries)
+    const windowStart = new Date(job.workDate);
+    windowStart.setUTCDate(windowStart.getUTCDate() - 2);
+    const windowEnd = new Date(job.workDate);
+    windowEnd.setUTCDate(windowEnd.getUTCDate() + 2);
+
+    const activeAssignments = await Assignment.find({
+      worker: workerId,
+      status: { $in: [ASSIGNMENT_STATUSES.CONFIRMED, ASSIGNMENT_STATUSES.IN_PROGRESS] },
+      'agreedSchedule.workDate': { $gte: windowStart, $lte: windowEnd }
+    }).populate('job', 'title');
+
+    for (const assignment of activeAssignments) {
+      if (assignment.agreedSchedule?.startTime && assignment.agreedSchedule?.endTime) {
+        try {
+          const assignedInterval = getShiftInterval(
+            assignment.agreedSchedule.workDate,
+            assignment.agreedSchedule.startTime,
+            assignment.agreedSchedule.endTime
+          );
+
+          if (shiftsOverlap(targetInterval, assignedInterval)) {
+            const conflictJobTitle = assignment.job?.title || 'an existing shift';
+            return res.status(409).json({
+              success: false,
+              message: `Schedule conflict: This shift (${job.startTime}–${job.endTime}) overlaps with your confirmed shift for "${conflictJobTitle}" (${assignment.agreedSchedule.startTime}–${assignment.agreedSchedule.endTime}).`
+            });
+          }
+        } catch (err) {
+          console.warn('[Schedule] Skipped malformed assignment interval:', err.message);
+        }
+      }
+    }
+
     const application = await Application.create({
       job: jobId,
       worker: workerId,
       status: APPLICATION_STATUSES.APPLIED,
-      message,
+      message: String(message || '').slice(0, 1000),
       decisionHistory: [
         {
           status: APPLICATION_STATUSES.APPLIED,
@@ -78,7 +116,10 @@ export const applyToJob = async (req, res, next) => {
 
 export const getMyApplications = async (req, res, next) => {
   try {
-    const applications = await Application.find({ worker: req.user._id })
+    const isWorker = req.user.role === ROLES.WORKER;
+    const filter = isWorker ? { worker: req.user._id } : { employer: req.user._id };
+
+    const applications = await Application.find(filter)
       .populate({
         path: 'job',
         populate: { path: 'employer', select: 'name email' }
@@ -154,16 +195,78 @@ export const updateApplicationStatus = async (req, res, next) => {
 
     const job = application.job;
     if (job.employer.toString() !== req.user._id.toString() && req.user.role !== ROLES.ADMIN) {
-      return res.status(403).json({ success: false, message: 'Unauthorized.' });
+      return res.status(403).json({ success: false, message: 'Unauthorized to update this application.' });
     }
 
     if (!Object.values(APPLICATION_STATUSES).includes(status)) {
-      return res.status(400).json({ success: false, message: 'Invalid target status.' });
+      return res.status(400).json({ success: false, message: `Invalid target status: ${status}.` });
     }
 
-    // Server-enforced hiring capacity safeguard
+    // Server-enforced hiring capacity and invariant safeguards
     if (status === APPLICATION_STATUSES.HIRED) {
-      // Atomic conditional update to prevent over-filling openings
+      if (application.status === APPLICATION_STATUSES.HIRED) {
+        return res.status(400).json({
+          success: false,
+          message: 'Candidate is already hired for this position.'
+        });
+      }
+
+      if (job.filledCount >= job.openings) {
+        return res.status(400).json({
+          success: false,
+          message: 'Hiring capacity reached: All openings for this job are already filled.'
+        });
+      }
+
+      if (job.status === JOB_STATUSES.CANCELLED || job.status === JOB_STATUSES.COMPLETED) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot hire for a ${job.status.toLowerCase()} job posting.`
+        });
+      }
+
+      if (application.status === APPLICATION_STATUSES.WITHDRAWN) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot hire a candidate who voluntarily withdrew their application.'
+        });
+      }
+
+      // 1. Atomically lock the application state so concurrent requests cannot double-hire
+      const lockedApp = await Application.findOneAndUpdate(
+        {
+          _id: applicationId,
+          status: { $in: [APPLICATION_STATUSES.APPLIED, APPLICATION_STATUSES.SHORTLISTED, APPLICATION_STATUSES.OFFERED, APPLICATION_STATUSES.ACCEPTED] }
+        },
+        {
+          $set: { status: APPLICATION_STATUSES.HIRED },
+          $push: {
+            decisionHistory: {
+              status: APPLICATION_STATUSES.HIRED,
+              note: String(note || 'Applicant hired').slice(0, 500),
+              changedBy: req.user._id,
+              timestamp: new Date()
+            }
+          }
+        },
+        { new: true }
+      );
+
+      if (!lockedApp) {
+        const currentApp = await Application.findById(applicationId);
+        if (currentApp && currentApp.status === APPLICATION_STATUSES.HIRED) {
+          return res.status(409).json({
+            success: false,
+            message: 'Candidate is already hired for this position.'
+          });
+        }
+        return res.status(409).json({
+          success: false,
+          message: `Cannot hire candidate in current status: ${currentApp?.status || 'unknown'}.`
+        });
+      }
+
+      // 2. Atomic conditional update to allocate capacity
       const updatedJob = await Job.findOneAndUpdate(
         { _id: job._id, filledCount: { $lt: job.openings } },
         { $inc: { filledCount: 1 } },
@@ -171,55 +274,111 @@ export const updateApplicationStatus = async (req, res, next) => {
       );
 
       if (!updatedJob) {
-        return res.status(400).json({
+        // Rollback application status back to original state
+        await Application.findByIdAndUpdate(applicationId, {
+          status: application.status,
+          $pop: { decisionHistory: 1 }
+        });
+        return res.status(409).json({
           success: false,
           message: 'Hiring capacity reached: All openings for this job are already filled.'
         });
       }
 
-      // Check if now fully filled
+      // Check if job is now fully filled
       if (updatedJob.filledCount >= updatedJob.openings) {
         await Job.findByIdAndUpdate(job._id, { status: JOB_STATUSES.FILLED });
       }
 
-      // Create official confirmed Assignment
-      const assignment = await Assignment.create({
-        job: job._id,
-        worker: application.worker,
-        employer: job.employer,
-        application: application._id,
-        agreedSchedule: {
-          workDate: job.workDate,
-          startTime: job.startTime,
-          endTime: job.endTime,
-          totalHours: job.totalHours
-        },
-        agreedPayment: {
-          grossAmount: job.grossPay,
-          currency: job.currency,
-          basis: job.payBasis
-        },
-        status: ASSIGNMENT_STATUSES.CONFIRMED
-      });
+      // 3. Create confirmed Assignment with unique compound index protection
+      let assignment;
+      try {
+        assignment = await Assignment.create({
+          job: job._id,
+          worker: application.worker,
+          employer: job.employer,
+          application: application._id,
+          agreedSchedule: {
+            workDate: job.workDate,
+            startTime: job.startTime,
+            endTime: job.endTime,
+            totalHours: job.totalHours
+          },
+          agreedPayment: {
+            grossAmount: job.grossPay,
+            currency: job.currency,
+            basis: job.payBasis
+          },
+          status: ASSIGNMENT_STATUSES.CONFIRMED
+        });
+      } catch (assignErr) {
+        // Compensate: decrement filledCount & reset application status
+        await Job.findByIdAndUpdate(job._id, {
+          $inc: { filledCount: -1 },
+          status: JOB_STATUSES.OPEN
+        });
+        await Application.findByIdAndUpdate(applicationId, {
+          status: application.status,
+          $pop: { decisionHistory: 1 }
+        });
 
-      // Create initial Payment Record
-      await PaymentRecord.create({
-        assignment: assignment._id,
-        job: job._id,
-        worker: application.worker,
-        employer: job.employer,
-        amount: job.grossPay,
-        currency: job.currency,
-        basis: job.payBasis,
-        status: PAYMENT_STATUSES.DUE,
-        expectedDate: job.workDate,
-        paymentMethod: job.paymentMethod
-      });
+        if (assignErr.code === 11000) {
+          return res.status(409).json({
+            success: false,
+            message: 'Worker already has an active assignment for this job.'
+          });
+        }
+        throw assignErr;
+      }
+
+      // 4. Create initial Payment Record tied to this assignment
+      try {
+        await PaymentRecord.create({
+          assignment: assignment._id,
+          job: job._id,
+          worker: application.worker,
+          employer: job.employer,
+          amount: job.grossPay,
+          currency: job.currency,
+          basis: job.payBasis,
+          status: PAYMENT_STATUSES.DUE,
+          expectedDate: job.workDate,
+          paymentMethod: job.paymentMethod,
+          verificationSource: 'employer_recorded'
+        });
+      } catch (payErr) {
+        // Compensate: delete assignment, decrement filledCount, reset application status
+        await Assignment.findByIdAndDelete(assignment._id);
+        await Job.findByIdAndUpdate(job._id, {
+          $inc: { filledCount: -1 },
+          status: JOB_STATUSES.OPEN
+        });
+        await Application.findByIdAndUpdate(applicationId, {
+          status: application.status,
+          $pop: { decisionHistory: 1 }
+        });
+        throw payErr;
+      }
 
       await EmployerProfile.findOneAndUpdate(
         { user: job.employer },
         { $inc: { totalHiredWorkers: 1 } }
       );
+
+      // In-app notification to the worker
+      await createNotification({
+        recipient: application.worker,
+        type: 'SHIFT_UPCOMING',
+        title: `Application Accepted: ${job.title}`,
+        message: `Congratulations! You were hired for "${job.title}". Shift: ${job.startTime}–${job.endTime}.`,
+        link: `/worker/applications`
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Applicant successfully hired.',
+        application: lockedApp
+      });
     }
 
     application.status = status;
@@ -233,7 +392,7 @@ export const updateApplicationStatus = async (req, res, next) => {
 
     application.decisionHistory.push({
       status,
-      note,
+      note: String(note || '').slice(0, 500),
       changedBy: req.user._id,
       timestamp: new Date()
     });
@@ -268,7 +427,7 @@ export const withdrawApplication = async (req, res, next) => {
     }
 
     if (application.worker.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ success: false, message: 'Unauthorized.' });
+      return res.status(403).json({ success: false, message: 'Unauthorized to withdraw this application.' });
     }
 
     if (application.status === APPLICATION_STATUSES.HIRED) {
@@ -278,11 +437,19 @@ export const withdrawApplication = async (req, res, next) => {
       });
     }
 
+    if (application.status === APPLICATION_STATUSES.WITHDRAWN) {
+      return res.status(400).json({
+        success: false,
+        message: 'Application has already been withdrawn.'
+      });
+    }
+
     application.status = APPLICATION_STATUSES.WITHDRAWN;
     application.decisionHistory.push({
       status: APPLICATION_STATUSES.WITHDRAWN,
       note: 'Voluntarily withdrawn by worker',
-      changedBy: req.user._id
+      changedBy: req.user._id,
+      timestamp: new Date()
     });
     await application.save();
 
@@ -321,7 +488,8 @@ export const respondToOffer = async (req, res, next) => {
     application.decisionHistory.push({
       status: newStatus,
       note: accept ? 'Offer accepted by candidate' : `Offer declined: ${reason}`,
-      changedBy: req.user._id
+      changedBy: req.user._id,
+      timestamp: new Date()
     });
     await application.save();
 

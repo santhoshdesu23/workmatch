@@ -26,6 +26,7 @@ export function formatMongoUri(rawUri) {
 }
 
 export const connectDB = async () => {
+  const isProduction = process.env.NODE_ENV === 'production';
   const rawUri = process.env.MONGODB_URI;
   const uri = formatMongoUri(rawUri);
 
@@ -34,10 +35,18 @@ export const connectDB = async () => {
       const sanitizedLog = uri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@');
       console.log(`[Database] Connecting to MongoDB URI: ${sanitizedLog}`);
       await mongoose.connect(uri, {
-        serverSelectionTimeoutMS: 6000
+        serverSelectionTimeoutMS: 8000,
+        maxPoolSize: 25,
+        minPoolSize: 2
       });
       console.log('[Database] MongoDB connected successfully.');
       return;
+    }
+
+    if (isProduction) {
+      throw new Error(
+        'FATAL: MONGODB_URI environment variable is required in production. Falling back to an in-memory database is prohibited.'
+      );
     }
 
     console.log('[Database] No MONGODB_URI provided in environment. Starting in-memory MongoDB instance for local development/testing...');
@@ -47,8 +56,13 @@ export const connectDB = async () => {
     await mongoose.connect(memoryUri);
     console.log(`[Database] Connected to In-Memory MongoDB at ${memoryUri}`);
   } catch (error) {
+    if (isProduction) {
+      console.error(`[Database] Fatal production connection error: ${error.message}`);
+      throw error;
+    }
+
     console.warn(`[Database] Failed to connect to configured MongoDB URI (${error.message}).`);
-    console.log('[Database] Activating fallback In-Memory MongoDB instance so application stays operational...');
+    console.log('[Database] Activating fallback In-Memory MongoDB instance for development/testing...');
     try {
       const { MongoMemoryServer } = await import('mongodb-memory-server');
       memoryServer = await MongoMemoryServer.create();

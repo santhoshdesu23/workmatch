@@ -1,53 +1,188 @@
-# WorkMatch — GitHub & Vercel Deployment Guide
+# WorkMatch — Production Hardening & Deployment Manual
 
-This guide provides step-by-step instructions to push your repository to GitHub and deploy the application live on Vercel.
+WorkMatch is an explainable AI-powered, location-based temporary employment marketplace connecting workers with local employers for verified short-duration shifts.
+
+This guide provides exhaustive documentation for deploying WorkMatch in production with zero-known defects across Vercel, Render, and MongoDB Atlas.
 
 ---
 
-## 1. Push to GitHub
+## 1. Production Architecture Overview
 
-### Step A: Create a New Repository on GitHub
-1. Go to [https://github.com/new](https://github.com/new).
-2. Enter Repository name: `workmatch` (or your preferred name).
-3. Choose **Public** or **Private**.
-4. **Do NOT check** "Initialize with README", `.gitignore`, or license (we already have them set up).
-5. Click **Create repository**.
-
-### Step B: Connect and Push Your Code
-Open your terminal in `c:\Users\santh\.antigravity-ide\work match` and run:
-
-```bash
-git remote add origin https://github.com/<YOUR_GITHUB_USERNAME>/<YOUR_REPOSITORY_NAME>.git
-git push -u origin main
+```
+                      +-----------------------------+
+                      |   Cloudflare / Vercel Edge  |
+                      |   (HTTPS, CDN, DDoS Guard)  |
+                      +--------------+--------------+
+                                     |
+               +---------------------+---------------------+
+               |                                           |
+               v                                           v
+      +------------------+                       +-------------------+
+      |  Vercel Frontend |                       |   Render Backend  |
+      |   (Vite + React) |                       |  (Express Node.js)|
+      +--------+---------+                       +---------+---------+
+               |                                           |
+               +---------------------+---------------------+
+                                     |
+                                     v
+                       +---------------------------+
+                       |   MongoDB Atlas Cluster   |
+                       | (M10+, Replica Set, TLS)  |
+                       +---------------------------+
 ```
 
-*(Replace `<YOUR_GITHUB_USERNAME>` and `<YOUR_REPOSITORY_NAME>` with your actual GitHub repository URL).*
+---
 
-> **Security Note:** Your `.env` files are protected by `.gitignore` and are **not** committed or exposed to GitHub.
+## 2. Environment Variables & Secret Specifications
+
+### Production Environment Variables
+
+| Variable Name | Required | Min Length | Target Component | Description |
+|---|---|---|---|---|
+| `NODE_ENV` | **Yes** | — | Backend | Must be set to `production`. Enforces strict security policies, disables development fallbacks, and hides error stack traces. |
+| `PORT` | **Yes** | — | Backend | Server port (default `5000` or assigned dynamically by Render/Cloud provider). |
+| `MONGODB_URI` | **Yes** | — | Backend | MongoDB Atlas connection string with TLS/SSL, replica set, and write concern. Silent fallback to in-memory databases is prohibited in production. |
+| `JWT_SECRET` | **Yes** | 32 chars | Backend | Cryptographically random secret used with HMAC-SHA256. Boot will fail fast if shorter than 32 characters. |
+| `CLIENT_URL` | **Yes** | — | Backend | Public frontend domain (e.g. `https://workmatch.vercel.app`). Enforces strict CORS allowlist and generates password-reset URLs. |
+| `EMAIL_PROVIDER` | **Yes** | — | Backend | Must be set to `resend` in production. Boot will fail fast if set to `mock` or omitted in production. |
+| `RESEND_API_KEY` | **Yes** | — | Backend | Official Resend API key (`re_...`). Boot will fail fast if missing in production. |
+| `EMAIL_FROM` | **Yes** | — | Backend | Verified sender header (e.g. `WorkMatch Security <security@workmatch.app>`). |
+| `RATE_LIMIT_STORE` | Optional | — | Backend | `memory` (default) for single-instance, or `redis` for multi-instance horizontal scaling. |
+| `REDIS_URL` | Conditional | — | Backend | Redis connection string (required in production if `RATE_LIMIT_STORE=redis`). |
+| `GEMINI_API_KEY` | Optional | — | Backend | Google Gemini API Key. If absent, WorkMatch seamlessly falls back to the deterministic explainable rule engine. |
+| `VITE_API_URL` | **Yes** | — | Frontend | Root endpoint for backend API calls (e.g. `/api` for Vercel monorepo, or `https://workmatch-api.onrender.com/api`). |
+| `VITE_ENABLE_DEMO_SHORTCUTS` | Optional | — | Frontend | Set to `false` in production to prevent 1-click test credentials from appearing on public login screens. |
+
+> **Security Rule:** Never commit `.env` files to git. Verify that `.env` is listed in [`.gitignore`](./.gitignore).
+
+### 2.1 Resend Email Configuration & Domain Verification
+
+WorkMatch uses the official Resend SDK for transactional emails (such as single-use password resets).
+
+- **Environment Variables Required in Render:**
+  - `EMAIL_PROVIDER=resend`
+  - `RESEND_API_KEY=re_...`
+  - `EMAIL_FROM=WorkMatch Security <security@workmatch.app>`
+  - `CLIENT_URL=https://<your-frontend>.vercel.app`
+
+> [!IMPORTANT]
+> **Domain Verification Requirement:**  
+> The sender `security@workmatch.app` can deliver production emails to external user inboxes only **after** the domain `workmatch.app` has been added to [Resend Domains](https://resend.com/domains) and its corresponding DNS records (DKIM, SPF, and MX) have been verified in your DNS provider.  
+> Prior to domain verification, Resend will only permit sending to the registered account owner's email address or via onboarding test addresses (e.g. `onboarding@resend.dev`).
 
 ---
 
-## 2. Deploy on Vercel
+## 3. Deployment Targets
 
-The repository is pre-configured with a full-stack [`vercel.json`](./vercel.json) and [`api/index.js`](./api/index.js) serverless handler.
+### Option A: Monorepo Deployment on Vercel (Frontend + Serverless API)
 
-### Step A: Import into Vercel
-1. Log in to [Vercel](https://vercel.com).
-2. Click **Add New...** → **Project**.
-3. Import your GitHub repository (`workmatch`).
-4. Keep the **Root Directory** as `./` (or default).
-5. Framework Preset: **Vite** (Vercel detects this automatically).
+1. Connect your GitHub repository on [Vercel](https://vercel.com).
+2. Configure project settings:
+   - **Framework Preset:** Vite
+   - **Root Directory:** `./`
+   - **Build Command:** `npm --prefix client install && npm --prefix client run build`
+   - **Output Directory:** `client/dist`
+3. Configure Environment Variables in Vercel Dashboard:
+   - `NODE_ENV`: `production`
+   - `MONGODB_URI`: `mongodb+srv://<user>:<password>@cluster.mongodb.net/workmatch?retryWrites=true&w=majority`
+   - `JWT_SECRET`: *(Cryptographically random 64-character hex string)*
+   - `CLIENT_URL`: `https://<your-project>.vercel.app`
+   - `EMAIL_PROVIDER`: `resend`
+   - `RESEND_API_KEY`: `re_your_resend_api_key`
+   - `EMAIL_FROM`: `WorkMatch Security <security@workmatch.app>`
+   - `GEMINI_API_KEY`: *(Your Google AI Studio Key)*
+   - `VITE_API_URL`: `/api`
+4. Deploy. [`vercel.json`](./vercel.json) routes `/api/*` to [`api/index.js`](./api/index.js) and static routes to `index.html`.
 
-### Step B: Add Environment Variables in Vercel
-Before clicking Deploy, expand **Environment Variables** in Vercel and add:
+---
 
-| Key | Value | Description |
-|---|---|---|
-| `MONGODB_URI` | `your_mongodb_atlas_connection_string` | Your live MongoDB Atlas Cluster |
-| `JWT_SECRET` | `your_jwt_secret_key` | Token encryption secret |
-| `GEMINI_API_KEY` | `your_gemini_api_key` | Google Gemini AI Key |
-| `NODE_ENV` | `production` | Production mode |
+### Option B: Decoupled Deployment (Vercel Frontend + Render Backend)
 
-### Step C: Deploy
-1. Click **Deploy**.
-2. Vercel will install dependencies, build the React frontend with Vite, bundle the serverless `/api` routes, and provide your live production URL (e.g., `https://workmatch-app.vercel.app`).
+#### Backend on Render (Web Service):
+1. Create a new **Web Service** on [Render](https://render.com).
+2. Select your repository and specify:
+   - **Root Directory:** `server`
+   - **Runtime:** `Node`
+   - **Build Command:** `npm install`
+   - **Start Command:** `npm start`
+3. Add Environment Variables on Render:
+   - `NODE_ENV`: `production`
+   - `PORT`: `10000`
+   - `MONGODB_URI`: `your_atlas_connection_string`
+   - `JWT_SECRET`: `your_random_32char_secret`
+   - `CLIENT_URL`: `https://your-frontend.vercel.app`
+   - `EMAIL_PROVIDER`: `resend`
+   - `RESEND_API_KEY`: `re_your_resend_api_key`
+   - `EMAIL_FROM`: `WorkMatch Security <security@workmatch.app>`
+   - `GEMINI_API_KEY`: `your_gemini_key`
+4. Set Health Check path to `/api/health`.
+
+#### Frontend on Vercel:
+1. Create a project on Vercel with **Root Directory:** `client`.
+2. Add Environment Variable:
+   - `VITE_API_URL`: `https://your-render-service.onrender.com/api`
+
+---
+
+## 4. Database Hardening (MongoDB Atlas)
+
+1. **Network Security:**
+   - In Atlas *Network Access*, add the outbound IP addresses of your Render or Vercel deployment (or use VPC Peering / AWS PrivateLink for enterprise setups).
+   - For serverless deployments where static egress IPs are not available, use temporary strict CIDR ranges or secured user credential rotation.
+2. **Database User Least Privilege:**
+   - Create a dedicated database user with `readWrite` access restricted solely to the `workmatch` database.
+   - Do not grant cluster-admin privileges to the application runtime user.
+3. **Indexes Verification:**
+   - Geospatial index: `Job.collection.createIndex({ location: "2dsphere" })`
+   - Unique constraints:
+     - `Application`: `{ job: 1, worker: 1 }` (unique)
+     - `Review`: `{ assignment: 1, reviewer: 1 }` (unique)
+     - `User`: `{ email: 1 }` (unique)
+     - `PaymentRecord`: `{ assignment: 1 }` (unique)
+
+---
+
+## 5. Backup & Disaster Recovery Procedures
+
+### Automated Cloud Backups
+- Enable MongoDB Atlas Continuous Cloud Backups (Point-In-Time Restore) with 7-day retention for production clusters.
+
+### Manual Backup (Database Snapshot)
+To export a full point-in-time backup locally or to secure S3 storage:
+
+```bash
+mongodump --uri="mongodb+srv://<username>:<password>@cluster.mongodb.net/workmatch" --out="./backup-$(date +%Y%m%d_%H%M%S)"
+```
+
+### Recovery Verification Runbook
+To verify database recovery in a safe staging or disaster recovery environment:
+
+```bash
+# 1. Verify archive integrity
+mongorestore --dryRun --uri="mongodb+srv://<staging_user>:<staging_pass>@staging-cluster.mongodb.net/workmatch" ./backup-<TIMESTAMP>/workmatch
+
+# 2. Perform restoration to target database
+mongorestore --drop --uri="mongodb+srv://<staging_user>:<staging_pass>@staging-cluster.mongodb.net/workmatch" ./backup-<TIMESTAMP>/workmatch
+
+# 3. Verify record integrity through test suite
+NODE_ENV=test MONGODB_URI="mongodb+srv://<staging_user>:<staging_pass>@staging-cluster.mongodb.net/workmatch" npm --prefix server test
+```
+
+---
+
+## 6. Health Monitoring & Incident Runbook
+
+### Health Check Endpoints
+- **Liveness Probe:** `GET /api/health`
+  - Returns `200 OK` with `{ status: "healthy", uptimeSeconds, service }`.
+  - Used by Render, Kubernetes, or load balancers to determine process responsiveness.
+- **Readiness Probe:** `GET /api/health/ready`
+  - Returns `200 OK` if database connection state is active (`readyState === 1`).
+  - Returns `503 Service Unavailable` if database disconnected.
+
+### Rate Limit Alert Thresholds
+- Rate limit violations return `HTTP 429 Too Many Requests`.
+- Monitor repeated 429 errors on `/api/auth/*` as indicators of credential brute-forcing.
+
+### Graceful Shutdown
+- The backend process traps `SIGTERM` and `SIGINT`, stops accepting new HTTP connections, completes ongoing transactions, disconnects Mongoose cleanly, and exits within 10 seconds.

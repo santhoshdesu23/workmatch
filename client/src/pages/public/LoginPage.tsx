@@ -68,71 +68,76 @@ export const LoginPage: React.FC = () => {
         <p className="text-xs text-slate-500">Access your worker or employer workspace</p>
       </div>
 
-      {/* Demo Account Quick-Access Cards */}
-      <Card className="p-4 bg-emerald-50/50 border-emerald-200 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" /> 1-Click Demo Logins
-          </span>
-          <span className="text-[11px] text-emerald-700 font-medium">Instant Evaluation</span>
-        </div>
+      {/* Demo Account Quick-Access Cards (Available in development and evaluator preview) */}
+      {(!import.meta.env.PROD || import.meta.env.VITE_ENABLE_DEMO_SHORTCUTS === 'true') && (
+        <Card className="p-4 bg-emerald-50/50 border-emerald-200 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" /> 1-Click Demo Logins
+            </span>
+            <span className="text-[11px] text-emerald-700 font-medium">Evaluation Sandbox</span>
+          </div>
 
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <button
-            type="button"
-            onClick={() => handleQuickDemo('worker')}
-            className="p-2.5 rounded-xl bg-white border border-emerald-200 hover:border-emerald-400 text-left transition-all hover:shadow-xs cursor-pointer"
-          >
-            <div className="flex items-center gap-1.5 font-bold text-slate-800">
-              <UserCheck className="w-3.5 h-3.5 text-emerald-600" /> Worker 1
-            </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Alex (Hospitality)</div>
-          </button>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => handleQuickDemo('worker')}
+              className="p-2.5 rounded-xl bg-white border border-emerald-200 hover:border-emerald-400 text-left transition-all hover:shadow-xs cursor-pointer"
+            >
+              <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                <UserCheck className="w-3.5 h-3.5 text-emerald-600" /> Worker 1
+              </div>
+              <div className="text-[11px] text-slate-500 mt-0.5">Alex (Hospitality)</div>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => handleQuickDemo('worker2')}
-            className="p-2.5 rounded-xl bg-white border border-emerald-200 hover:border-emerald-400 text-left transition-all hover:shadow-xs cursor-pointer"
-          >
-            <div className="flex items-center gap-1.5 font-bold text-slate-800">
-              <UserCheck className="w-3.5 h-3.5 text-emerald-600" /> Worker 2
-            </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Jordan (Warehouse)</div>
-          </button>
+            <button
+              type="button"
+              onClick={() => handleQuickDemo('worker2')}
+              className="p-2.5 rounded-xl bg-white border border-emerald-200 hover:border-emerald-400 text-left transition-all hover:shadow-xs cursor-pointer"
+            >
+              <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                <UserCheck className="w-3.5 h-3.5 text-emerald-600" /> Worker 2
+              </div>
+              <div className="text-[11px] text-slate-500 mt-0.5">Jordan (Warehouse)</div>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => handleQuickDemo('employer')}
-            className="p-2.5 rounded-xl bg-white border border-emerald-200 hover:border-emerald-400 text-left transition-all hover:shadow-xs cursor-pointer"
-          >
-            <div className="flex items-center gap-1.5 font-bold text-slate-800">
-              <Building2 className="w-3.5 h-3.5 text-emerald-600" /> Employer
-            </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Apex Event Staffing</div>
-          </button>
+            <button
+              type="button"
+              onClick={() => handleQuickDemo('employer')}
+              className="p-2.5 rounded-xl bg-white border border-emerald-200 hover:border-emerald-400 text-left transition-all hover:shadow-xs cursor-pointer"
+            >
+              <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                <Building2 className="w-3.5 h-3.5 text-emerald-600" /> Employer
+              </div>
+              <div className="text-[11px] text-slate-500 mt-0.5">Apex Event Staffing</div>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => handleQuickDemo('admin')}
-            className="p-2.5 rounded-xl bg-white border border-amber-300 hover:border-amber-500 text-left transition-all hover:shadow-xs cursor-pointer"
-          >
-            <div className="flex items-center gap-1.5 font-bold text-amber-900">
-              <ShieldAlert className="w-3.5 h-3.5 text-amber-600" /> Administrator
-            </div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Full Platform Access</div>
-          </button>
-        </div>
-      </Card>
+            <button
+              type="button"
+              onClick={() => handleQuickDemo('admin')}
+              className="p-2.5 rounded-xl bg-white border border-amber-300 hover:border-amber-500 text-left transition-all hover:shadow-xs cursor-pointer"
+            >
+              <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-600" /> Administrator
+              </div>
+              <div className="text-[11px] text-slate-500 mt-0.5">Full Platform Access</div>
+            </button>
+          </div>
+        </Card>
+      )}
 
       {/* Manual Login Card */}
       <Card className="p-6 sm:p-8 space-y-5">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">Email Address</label>
+            <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700 mb-1.5">Email Address</label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
               <input
+                id="login-email"
+                name="email"
                 type="email"
+                autoComplete="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -144,7 +149,7 @@ export const LoginPage: React.FC = () => {
 
           <div>
             <div className="flex justify-between items-center mb-1.5">
-              <label className="text-xs font-semibold text-slate-700">Password</label>
+              <label htmlFor="login-password" className="text-xs font-semibold text-slate-700">Password</label>
               <Link to="/forgot-password" className="text-[11px] text-emerald-600 hover:underline">
                 Forgot password?
               </Link>
@@ -152,7 +157,10 @@ export const LoginPage: React.FC = () => {
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
               <input
+                id="login-password"
+                name="password"
                 type="password"
+                autoComplete="current-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

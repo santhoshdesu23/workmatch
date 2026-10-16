@@ -34,7 +34,7 @@ api.interceptors.response.use(
       } else if (error.response.status === 409) {
         message = 'An account with this email address already exists. Please log in.';
       } else if (error.response.status === 401) {
-        message = 'Invalid email or password.';
+        message = 'Authentication required or session expired. Please log in.';
       } else if (error.response.status === 403) {
         message = 'You do not have permission to perform this action.';
       } else if (error.response.status === 404) {

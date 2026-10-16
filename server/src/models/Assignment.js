@@ -68,6 +68,6 @@ const assignmentSchema = new mongoose.Schema(
   }
 );
 
-assignmentSchema.index({ job: 1, worker: 1 });
+assignmentSchema.index({ job: 1, worker: 1 }, { unique: true });
 
 export const Assignment = mongoose.model('Assignment', assignmentSchema);

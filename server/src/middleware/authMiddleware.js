@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import { verifyToken } from '../config/jwt.js';
 import { User } from '../models/User.js';
 
 export const requireAuth = async (req, res, next) => {
@@ -16,14 +16,20 @@ export const requireAuth = async (req, res, next) => {
       });
     }
 
-    const secret = process.env.JWT_SECRET || 'workmatch-development-secret-jwt-key-2026';
     let decoded;
     try {
-      decoded = jwt.verify(token, secret);
+      decoded = verifyToken(token);
     } catch (err) {
       return res.status(401).json({
         success: false,
         message: 'Session expired or invalid authentication token.'
+      });
+    }
+
+    if (!decoded || !decoded.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Malformed authentication token.'
       });
     }
 
@@ -40,6 +46,24 @@ export const requireAuth = async (req, res, next) => {
         success: false,
         message: 'Your account has been suspended. Please contact platform administration.'
       });
+    }
+
+    // Check token revocation via tokenVersion or passwordChangedAt
+    if (decoded.tokenVersion !== undefined && user.tokenVersion !== undefined) {
+      if (decoded.tokenVersion !== user.tokenVersion) {
+        return res.status(401).json({
+          success: false,
+          message: 'Password was recently changed. Please log in again.'
+        });
+      }
+    } else if (user.passwordChangedAt && decoded.iat) {
+      const changedTimestamp = Math.floor(user.passwordChangedAt.getTime() / 1000);
+      if (decoded.iat < changedTimestamp) {
+        return res.status(401).json({
+          success: false,
+          message: 'Password was recently changed. Please log in again.'
+        });
+      }
     }
 
     req.user = user;
@@ -77,11 +101,15 @@ export const optionalAuth = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
     }
     if (token) {
-      const secret = process.env.JWT_SECRET || 'workmatch-development-secret-jwt-key-2026';
-      const decoded = jwt.verify(token, secret);
-      const user = await User.findById(decoded.id).select('-passwordHash');
-      if (user && user.accountStatus !== 'suspended') {
-        req.user = user;
+      const decoded = verifyToken(token);
+      if (decoded && decoded.id) {
+        const user = await User.findById(decoded.id).select('-passwordHash');
+        if (user && user.accountStatus !== 'suspended') {
+          const versionMatches = decoded.tokenVersion === undefined || user.tokenVersion === undefined || decoded.tokenVersion === user.tokenVersion;
+          if (versionMatches) {
+            req.user = user;
+          }
+        }
       }
     }
   } catch (err) {

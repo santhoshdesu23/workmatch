@@ -155,9 +155,11 @@ Build output is emitted to `client/dist`.
 - `POST /api/assignments/:assignmentId/confirm-completion` — Dual checkout confirmation
 - `PATCH /api/assignments/:assignmentId/status` — Update shift attendance status
 
-### Payments
-- `GET /api/payments/me` — Transparent earnings and payment history
-- `PATCH /api/payments/:paymentId/status` — Employer records payment disbursement
+### Payments (Dual-Attestation Tracking Ledger)
+- `GET /api/payments/me` — Transparent earnings and payment history (restricted to participating worker/employer)
+- `PATCH /api/payments/:paymentId/status` — Employer records payment disbursement (tagged `employer_recorded`)
+- `POST /api/payments/:paymentId/confirm-receipt` — Worker confirms funds receipt (transitions to `worker_confirmed`)
+*Note: WorkMatch currently operates as an authentic dual-attestation payment tracking ledger. It does NOT simulate or claim gateway verification without a trusted third-party payment provider integration.*
 
 ### Reviews & Reports
 - `POST /api/reviews` — Submit review for eligible completed shift
@@ -201,9 +203,11 @@ Build output is emitted to `client/dist`.
 
 ## 🔒 Security & Data Integrity Highlights
 
-- **Password Hashing**: Salting and hashing via `bcryptjs`.
-- **JWT Protection**: Tokens verified on all protected worker, employer, and admin routes.
-- **Role Enforcement**: Server-enforced authorization guards prevent unauthorized access regardless of client UI state.
-- **Race Condition Prevention**: Atomic conditional operations on database openings (`filledCount: { $lt: openings }`) prevent overbooking.
-- **Rate Limiting & Security Headers**: Helmet headers and Express rate limiting active on `/api`.
-- **Zero Dark Patterns**: No auto-applications, no fabricated badges, and upfront disclosure of all shift details.
+- **Password Hashing**: Salting and hashing via `bcryptjs` with cost factor 12.
+- **JWT Protection & Revocation**: Monotonically increasing `tokenVersion` invalidates prior active sessions on password change/reset.
+- **Role Enforcement & IDOR Protection**: Server-enforced authorization guards prevent unauthorized access regardless of client UI state.
+- **Race Condition & Double-Hire Prevention**: Atomic applicant locking and conditional capacity checks (`filledCount: { $lt: openings }`) prevent double-hiring and overbooking.
+- **Accurate Shift-Overlap Detection**: Evaluates true start/end intervals ($S_1 < E_2 \land E_1 > S_2$), safely accommodates back-to-back shifts, and handles overnight shifts across midnight.
+- **Rate Limiting & Proxy Security**: Rate limiting with proxy trust validation (`trust proxy: 1`) and pluggable Redis cluster store support (`RATE_LIMIT_STORE`).
+- **Benchmark Characterization**: Measured on local loopback at ~70–120 requests/second. Real-world scaling across instances requires shared Redis and MongoDB Atlas replica sets.
+- **Zero Dark Patterns**: No auto-applications, no fabricated badges, upfront terms, and no fake payment gateway claims.

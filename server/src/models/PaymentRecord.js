@@ -58,6 +58,18 @@ const paymentRecordSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
+    verificationSource: {
+      type: String,
+      enum: ['employer_recorded', 'worker_confirmed', 'provider_verified'],
+      default: 'employer_recorded'
+    },
+    workerConfirmedReceipt: {
+      type: Boolean,
+      default: false
+    },
+    workerConfirmedReceiptAt: {
+      type: Date
+    },
     notes: {
       type: String,
       default: ''

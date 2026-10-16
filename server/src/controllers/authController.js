@@ -1,14 +1,30 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
 import { WorkerProfile } from '../models/WorkerProfile.js';
 import { EmployerProfile } from '../models/EmployerProfile.js';
+import { VerificationRequest } from '../models/VerificationRequest.js';
 import { ROLES } from '../config/constants.js';
+import { signToken } from '../config/jwt.js';
+import { sendPasswordResetEmail } from '../services/emailService.js';
 
-const generateToken = (userId, role) => {
-  const secret = process.env.JWT_SECRET || 'workmatch-development-secret-jwt-key-2026';
-  return jwt.sign({ id: userId, role }, secret, { expiresIn: '7d' });
-};
+const ALLOWED_REGISTRATION_ROLES = [ROLES.WORKER, ROLES.EMPLOYER];
+
+function validatePasswordStrength(password) {
+  if (!password || typeof password !== 'string') {
+    return 'Password is required.';
+  }
+  if (password.length < 8) {
+    return 'Password must be at least 8 characters long.';
+  }
+  if (password.length > 128) {
+    return 'Password cannot exceed 128 characters.';
+  }
+  if (!/[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    return 'Password must contain at least one number or special character.';
+  }
+  return null;
+}
 
 export const register = async (req, res, next) => {
   try {
@@ -21,14 +37,24 @@ export const register = async (req, res, next) => {
       });
     }
 
-    if (!Object.values(ROLES).includes(role)) {
+    // Role Escalation Protection: Public registration can NEVER create an admin account
+    if (!ALLOWED_REGISTRATION_ROLES.includes(role)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid role specified.'
+        message: 'Invalid registration role. Allowed roles: worker, employer.'
       });
     }
 
-    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      return res.status(400).json({
+        success: false,
+        message: passwordError
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return res.status(409).json({
         success: false,
@@ -36,14 +62,15 @@ export const register = async (req, res, next) => {
       });
     }
 
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(password, salt);
 
     const user = await User.create({
       name: name.trim(),
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       passwordHash,
-      role
+      role,
+      passwordChangedAt: new Date()
     });
 
     // Create appropriate profile
@@ -57,11 +84,11 @@ export const register = async (req, res, next) => {
     } else if (role === ROLES.EMPLOYER) {
       profile = await EmployerProfile.create({
         user: user._id,
-        businessName: businessName?.trim() || `${name}'s Organization`
+        businessName: businessName?.trim() || `${name.trim()}'s Organization`
       });
     }
 
-    const token = generateToken(user._id, user.role);
+    const token = signToken({ id: user._id, role: user.role, tokenVersion: user.tokenVersion || 0 });
 
     res.status(201).json({
       success: true,
@@ -93,8 +120,11 @@ export const login = async (req, res, next) => {
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
+      // Prevent account enumeration by timing
+      await bcrypt.compare(password, '$2a$12$e8Y3yq2x84H65v6J7oO42u4j4Qj4Qj4Qj4Qj4Qj4Qj4Qj4Qj4Qj4Q');
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password.'
@@ -126,7 +156,7 @@ export const login = async (req, res, next) => {
       profile = await EmployerProfile.findOne({ user: user._id });
     }
 
-    const token = generateToken(user._id, user.role);
+    const token = signToken({ id: user._id, role: user.role, tokenVersion: user.tokenVersion || 0 });
 
     res.status(200).json({
       success: true,
@@ -183,11 +213,47 @@ export const forgotPassword = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Email is required.' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
-    // Generic response to prevent account enumeration
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail });
+
+    let resetToken = null;
+    let deliverySuccess = true;
+
+    if (user) {
+      // Generate cryptographically secure random token
+      resetToken = crypto.randomBytes(32).toString('hex');
+      const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+      user.resetPasswordToken = hashedToken;
+      user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+      await user.save();
+
+      // Dispatch reset URL to user's registered email
+      const emailResult = await sendPasswordResetEmail({
+        to: user.email,
+        resetToken,
+        userName: user.name
+      });
+
+      if (!emailResult.success) {
+        deliverySuccess = false;
+        console.error(`[Auth] Password reset email delivery failed for user ${user._id}: ${emailResult.error}`);
+        // If delivery failed in production, clear the active token to prevent dangling state
+        if (process.env.NODE_ENV === 'production') {
+          user.resetPasswordToken = undefined;
+          user.resetPasswordExpires = undefined;
+          await user.save();
+        }
+      }
+    }
+
+    // Expose debug token only in mock/test mode; NEVER when Resend or production is active
+    const canExposeDevToken = process.env.NODE_ENV !== 'production' && (process.env.EMAIL_PROVIDER || '').toLowerCase() !== 'resend';
+
     res.status(200).json({
       success: true,
-      message: 'If an account exists with this email address, password recovery instructions have been sent.'
+      message: 'If an account exists with this email address, password recovery instructions have been sent.',
+      ...(canExposeDevToken && resetToken ? { devResetToken: resetToken } : {})
     });
   } catch (error) {
     next(error);
@@ -196,18 +262,38 @@ export const forgotPassword = async (req, res, next) => {
 
 export const resetPassword = async (req, res, next) => {
   try {
-    const { email, newPassword } = req.body;
-    if (!email || !newPassword) {
-      return res.status(400).json({ success: false, message: 'Email and new password are required.' });
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Reset token and new password are required.'
+      });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    const passwordError = validatePasswordStrength(newPassword);
+    if (passwordError) {
+      return res.status(400).json({ success: false, message: passwordError });
+    }
+
+    const hashedToken = crypto.createHash('sha256').update(token.trim()).digest('hex');
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: new Date() }
+    });
+
     if (!user) {
-      return res.status(404).json({ success: false, message: 'Account not found.' });
+      return res.status(400).json({
+        success: false,
+        message: 'Password reset token is invalid or has expired.'
+      });
     }
 
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(12);
     user.passwordHash = await bcrypt.hash(newPassword, salt);
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    user.passwordChangedAt = new Date();
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
 
     res.status(200).json({
@@ -219,15 +305,124 @@ export const resetPassword = async (req, res, next) => {
   }
 };
 
+export const changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password and new password are required.'
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Current password does not match.'
+      });
+    }
+
+    const passwordError = validatePasswordStrength(newPassword);
+    if (passwordError) {
+      return res.status(400).json({ success: false, message: passwordError });
+    }
+
+    const salt = await bcrypt.genSalt(12);
+    user.passwordHash = await bcrypt.hash(newPassword, salt);
+    user.passwordChangedAt = new Date();
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+    await user.save();
+
+    // Issue refreshed token with incremented tokenVersion
+    const token = signToken({ id: user._id, role: user.role, tokenVersion: user.tokenVersion });
+
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully.',
+      token
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const verifyEmail = async (req, res, next) => {
   try {
-    const user = req.user;
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
     user.emailVerified = true;
     await user.save();
 
     res.status(200).json({
       success: true,
       message: 'Email verified successfully.'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const submitVerificationRequest = async (req, res, next) => {
+  try {
+    const { verificationType, submittedData } = req.body;
+    const userId = req.user._id;
+
+    if (!verificationType || !submittedData) {
+      return res.status(400).json({
+        success: false,
+        message: 'verificationType and submittedData are required.'
+      });
+    }
+
+    const allowedTypes = ['identity', 'business_license', 'tax_id', 'contact'];
+    if (!allowedTypes.includes(verificationType)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid verificationType. Allowed: ${allowedTypes.join(', ')}`
+      });
+    }
+
+    // Check if user already has a pending verification
+    const pending = await VerificationRequest.findOne({ user: userId, status: 'pending' });
+    if (pending) {
+      return res.status(409).json({
+        success: false,
+        message: 'You already have a pending verification request under administrative review.'
+      });
+    }
+
+    const vReq = await VerificationRequest.create({
+      user: userId,
+      verificationType,
+      status: 'pending',
+      submittedData: {
+        businessName: submittedData.businessName ? String(submittedData.businessName).slice(0, 100) : '',
+        registrationNumber: submittedData.registrationNumber ? String(submittedData.registrationNumber).slice(0, 50) : '',
+        documentType: submittedData.documentType ? String(submittedData.documentType).slice(0, 50) : '',
+        documentRef: submittedData.documentRef ? String(submittedData.documentRef).slice(0, 100) : ''
+      }
+    });
+
+    // Update user status to pending
+    await User.findByIdAndUpdate(userId, { verificationStatus: 'pending' });
+    if (req.user.role === ROLES.WORKER) {
+      await WorkerProfile.findOneAndUpdate({ user: userId }, { verificationStatus: 'pending' });
+    } else if (req.user.role === ROLES.EMPLOYER) {
+      await EmployerProfile.findOneAndUpdate({ user: userId }, { verificationStatus: 'pending' });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Verification request submitted successfully for moderation.',
+      verification: vReq
     });
   } catch (error) {
     next(error);
