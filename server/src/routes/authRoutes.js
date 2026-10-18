@@ -21,8 +21,7 @@ router.get('/me', requireAuth, getMe);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 router.post('/change-password', requireAuth, changePassword);
-router.post('/verify-email', verifyEmail);
-router.get('/verify-email', verifyEmail);
+router.post('/verify-email', verificationRateLimiter, verifyEmail);
 router.post('/resend-verification', verificationRateLimiter, optionalAuth, resendVerification);
 router.post('/verification-request', requireAuth, submitVerificationRequest);
 

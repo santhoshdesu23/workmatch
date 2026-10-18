@@ -253,9 +253,6 @@ export async function sendVerificationEmail({ to, verificationToken, userName = 
 
     if (error) {
       console.error(`[EmailService] Resend API error (${error.name || 'Error'}):`, error.message || error);
-      if (!isProduction) {
-        console.log(`\n[WorkMatch Dev Helper] Verification link for ${to} (blocked by Resend sandbox policy):\n${verifyUrl}\n`);
-      }
       return { success: false, error: error.message || 'Resend provider error' };
     }
 

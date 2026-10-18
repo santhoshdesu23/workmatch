@@ -5,6 +5,7 @@ import { Assignment } from '../models/Assignment.js';
 import { PaymentRecord } from '../models/PaymentRecord.js';
 import { User } from '../models/User.js';
 import { JOB_STATUSES, APPLICATION_STATUSES, ASSIGNMENT_STATUSES, PAYMENT_STATUSES } from '../config/constants.js';
+import { computeEmployerReliability } from '../services/reliabilityService.js';
 
 export const getMyEmployerProfile = async (req, res, next) => {
   try {
@@ -142,3 +143,17 @@ export const getEmployerDashboard = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getEmployerReliabilityHandler = async (req, res, next) => {
+  try {
+    const { employerId } = req.params;
+    const reliability = await computeEmployerReliability(employerId);
+    if (!reliability) {
+      return res.status(404).json({ success: false, message: 'Employer record not found.' });
+    }
+    res.status(200).json({ success: true, reliability });
+  } catch (error) {
+    next(error);
+  }
+};
+

@@ -5,7 +5,8 @@ import {
   createJob,
   updateJob,
   cancelJob,
-  toggleSaveJob
+  toggleSaveJob,
+  getJobHistory
 } from '../controllers/jobsController.js';
 import { applyToJob, getJobApplicants } from '../controllers/applicationsController.js';
 import { requireAuth, requireRole, optionalAuth, requireEmailVerified } from '../middleware/authMiddleware.js';
@@ -17,6 +18,7 @@ const router = Router();
 // Public / optional auth discovery
 router.get('/', optionalAuth, getJobs);
 router.get('/:jobId', optionalAuth, getJobById);
+router.get('/:jobId/history', optionalAuth, getJobHistory);
 
 // Protected employer endpoints
 router.post('/', requireAuth, requireRole(ROLES.EMPLOYER, ROLES.ADMIN), requireEmailVerified, jobPostRateLimiter, createJob);

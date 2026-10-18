@@ -114,6 +114,11 @@ export interface Job {
   applicationDeadline: string;
   cancellationPolicy: string;
   status: 'DRAFT' | 'OPEN' | 'FILLED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
+  detailsConfirmed?: boolean;
+  detailsConfirmedAt?: string;
+  detailsConfirmedBy?: string;
+  employerReliability?: EmployerReliability;
+  changeHistoryCount?: number;
   viewsCount?: number;
   applicationsCount?: number;
   distanceKm?: number | null;
@@ -272,6 +277,52 @@ export interface NotificationItem {
   createdAt: string;
 }
 
+export interface JobChangeHistoryItem {
+  _id: string;
+  job: string;
+  actor: {
+    _id: string;
+    name: string;
+    role: string;
+  };
+  actorRole: 'employer' | 'admin';
+  changedFields: string[];
+  changes: Array<{
+    field: string;
+    oldValue: any;
+    newValue: any;
+    isMaterial: boolean;
+  }>;
+  isMaterial: boolean;
+  reason?: string;
+  createdAt: string;
+}
+
+export interface EmployerReliability {
+  employerId: string;
+  businessName: string;
+  identityVerificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected' | string;
+  hasSufficientHistory: boolean;
+  minimumThresholdRequired: number;
+  metrics: {
+    completedAssignments: number;
+    totalInitiatedAssignments: number;
+    employerCancellations: number;
+    completionRate: number | null;
+    cancellationRate: number | null;
+    substantiatedMismatches: number;
+    ratingAverage: number;
+    ratingCount: number;
+  };
+  explanations: {
+    completionRate: string;
+    cancellationRate: string;
+    substantiatedMismatches: string;
+    rating: string;
+    identityVerificationNotice: string;
+  };
+}
+
 export interface ReportItem {
   _id: string;
   reporter: { _id: string; name: string; email: string };
@@ -279,7 +330,9 @@ export interface ReportItem {
   reportedJob?: { _id: string; title: string };
   category: string;
   description: string;
+  evidence?: string;
   status: 'pending' | 'investigating' | 'resolved' | 'dismissed';
+  substantiated?: boolean;
   resolutionNotes?: string;
   createdAt: string;
 }

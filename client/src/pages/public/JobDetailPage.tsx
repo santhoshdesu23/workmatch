@@ -4,12 +4,8 @@ import {
   MapPin,
   Calendar,
   Clock,
-  DollarSign,
   ShieldCheck,
   Users,
-  AlertCircle,
-  FileText,
-  Shirt,
   Sparkles,
   ChevronLeft,
   CheckCircle2,
@@ -18,12 +14,17 @@ import {
   Building2,
   Bookmark,
   Mail,
-  RefreshCw
+  RefreshCw,
+  History,
+  HelpCircle,
+  AlertTriangle,
+  CheckCheck,
+  Info
 } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { Job, Application } from '../../types';
+import { Job, JobChangeHistoryItem, EmployerReliability } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
 import { Badge } from '../../components/common/Badge';
@@ -45,11 +46,24 @@ export const JobDetailPage: React.FC = () => {
   const [applyMessage, setApplyMessage] = useState('');
   const [isApplying, setIsApplying] = useState(false);
 
+  // Reconfirm interest state
+  const [isReconfirming, setIsReconfirming] = useState(false);
+
   // Report Modal state
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [reportCategory, setReportCategory] = useState('misleading_job');
+  const [reportCategory, setReportCategory] = useState('pay_mismatch');
   const [reportDescription, setReportDescription] = useState('');
+  const [reportEvidence, setReportEvidence] = useState('');
   const [isReporting, setIsReporting] = useState(false);
+  const [reportSuccessFeedback, setReportSuccessFeedback] = useState(false);
+
+  // Reliability Explanations Modal
+  const [isReliabilityModalOpen, setIsReliabilityModalOpen] = useState(false);
+
+  // Job Change History state
+  const [changeHistory, setChangeHistory] = useState<JobChangeHistoryItem[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Email verification resend state
   const [isResendingVerify, setIsResendingVerify] = useState(false);
@@ -83,6 +97,25 @@ export const JobDetailPage: React.FC = () => {
       toastError(err.message || 'Job posting not found.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchHistory = async () => {
+    if (changeHistory.length > 0) {
+      setShowHistory(!showHistory);
+      return;
+    }
+    setLoadingHistory(true);
+    try {
+      const res = await api.get(`/jobs/${jobId}/history`);
+      if (res.data?.success) {
+        setChangeHistory(res.data.history || []);
+        setShowHistory(true);
+      }
+    } catch (err: any) {
+      toastError(err.message || 'Failed to load revision history.');
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -123,6 +156,22 @@ export const JobDetailPage: React.FC = () => {
     }
   };
 
+  const handleReconfirmInterest = async () => {
+    if (!job?.userApplication?._id) return;
+    setIsReconfirming(true);
+    try {
+      const res = await api.post(`/applications/${job.userApplication._id}/reconfirm`);
+      if (res.data?.success) {
+        success('You have successfully reconfirmed your interest in the updated shift terms.');
+        fetchJob();
+      }
+    } catch (err: any) {
+      toastError(err.message || 'Failed to reconfirm interest.');
+    } finally {
+      setIsReconfirming(false);
+    }
+  };
+
   const handleReportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
@@ -136,12 +185,12 @@ export const JobDetailPage: React.FC = () => {
       const res = await api.post('/reports', {
         reportedJob: jobId,
         category: reportCategory,
-        description: reportDescription
+        description: reportDescription,
+        evidence: reportEvidence
       });
       if (res.data?.success) {
-        success('Incident report submitted to Trust & Safety moderation team.');
-        setIsReportModalOpen(false);
-        setReportDescription('');
+        setReportSuccessFeedback(true);
+        success('Discrepancy report recorded and routed to Trust & Safety moderation.');
       }
     } catch (err: any) {
       toastError(err.message);
@@ -191,12 +240,8 @@ export const JobDetailPage: React.FC = () => {
 
   const isDeadlinePassed = new Date(job.applicationDeadline) < new Date();
   const isFilled = job.filledCount >= job.openings;
-  const canApply =
-    user?.role === 'worker' &&
-    !job.userApplication &&
-    job.status === 'OPEN' &&
-    !isDeadlinePassed &&
-    !isFilled;
+
+  const reliability: EmployerReliability | undefined = job.employerReliability;
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -214,9 +259,23 @@ export const JobDetailPage: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="emerald">{job.category}</Badge>
               <Badge variant={job.status === 'OPEN' ? 'blue' : 'slate'}>{job.status}</Badge>
+
+              {/* TrustTrack Confirmation Badge */}
+              {job.detailsConfirmed ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  Employer-Confirmed Listing
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full">
+                  Standard Listing
+                </span>
+              )}
+
+              {/* Distinction between Identity Verification and Listing Confirmation */}
               {job.employerProfile?.verificationStatus === 'verified' && (
                 <Badge variant="blue">
-                  <ShieldCheck className="w-3.5 h-3.5 text-sky-600" /> Verified Business
+                  <ShieldCheck className="w-3.5 h-3.5 text-sky-600" /> Verified Business Identity
                 </Badge>
               )}
             </div>
@@ -293,17 +352,184 @@ export const JobDetailPage: React.FC = () => {
             )}
           </div>
 
-          <button
-            onClick={() => setIsReportModalOpen(true)}
-            className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-rose-600 cursor-pointer"
-          >
-            <Flag className="w-3.5 h-3.5" />
-            Report this listing
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Revision history button */}
+            <button
+              onClick={fetchHistory}
+              className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
+            >
+              <History className="w-3.5 h-3.5" />
+              <span>Revision History {job.changeHistoryCount ? `(${job.changeHistoryCount})` : ''}</span>
+            </button>
+
+            {/* Report mismatch button */}
+            <button
+              onClick={() => {
+                setReportSuccessFeedback(false);
+                setIsReportModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-rose-600 cursor-pointer"
+            >
+              <Flag className="w-3.5 h-3.5" />
+              Report Discrepancy
+            </button>
+          </div>
         </div>
       </Card>
 
-      {/* Two Column Layout: Details & Match Engine */}
+      {/* Applicant Alert Banner: Material Changes after application */}
+      {job.userApplication && job.changeHistoryCount && job.changeHistoryCount > 0 && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div className="text-xs">
+              <span className="font-bold block">Important: Shift Details Were Updated by Employer</span>
+              <span>The employer made changes to this shift listing after your application. Please review the updated terms.</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-300 text-amber-900 hover:bg-amber-100"
+              onClick={fetchHistory}
+              leftIcon={<History className="w-3.5 h-3.5" />}
+            >
+              View Changes
+            </Button>
+            {job.userApplication.status !== 'WITHDRAWN' && job.userApplication.status !== 'CANCELLED' && (
+              <Button
+                size="sm"
+                onClick={handleReconfirmInterest}
+                isLoading={isReconfirming}
+                leftIcon={<CheckCheck className="w-3.5 h-3.5" />}
+              >
+                Reconfirm Interest
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TrustTrack Confirmed Commitments Card */}
+      <Card className="p-5 sm:p-6 bg-gradient-to-r from-emerald-50/50 via-white to-sky-50/50 border-emerald-100">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs">
+              TT
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
+                WorkMatch TrustTrack Verified Commitments
+              </h2>
+              <p className="text-[11px] text-slate-500">
+                Transparent and binding shift commitments backed by immutable platform audit logs.
+              </p>
+            </div>
+          </div>
+          {job.detailsConfirmedAt && (
+            <span className="text-[11px] text-slate-400">
+              Confirmed on {new Date(job.detailsConfirmedAt).toLocaleDateString()}
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div className="p-3 rounded-xl bg-white/80 border border-slate-100 shadow-xs">
+            <span className="text-slate-400 block text-[11px] mb-0.5">Guaranteed Rate</span>
+            <span className="font-extrabold text-emerald-800">${job.grossPay} / {job.payBasis}</span>
+            <span className="block text-[10px] text-slate-400 mt-0.5">No hidden commission cuts</span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-white/80 border border-slate-100 shadow-xs">
+            <span className="text-slate-400 block text-[11px] mb-0.5">Payout Timeline</span>
+            <span className="font-bold text-slate-800">{job.paymentTiming}</span>
+            <span className="block text-[10px] text-slate-400 mt-0.5">{job.paymentMethod}</span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-white/80 border border-slate-100 shadow-xs">
+            <span className="text-slate-400 block text-[11px] mb-0.5">Shift Window</span>
+            <span className="font-bold text-slate-800">{job.startTime} – {job.endTime}</span>
+            <span className="block text-[10px] text-slate-400 mt-0.5">{job.totalHours} hrs ({job.breakDurationMinutes}m break)</span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-white/80 border border-slate-100 shadow-xs">
+            <span className="text-slate-400 block text-[11px] mb-0.5">Change Policy</span>
+            <span className="font-bold text-slate-800">Traceable History</span>
+            <span className="block text-[10px] text-slate-400 mt-0.5">Applicants notified on edits</span>
+          </div>
+        </div>
+      </Card>
+
+      {/* Revision History Timeline Accordion */}
+      {showHistory && (
+        <Card className="p-6 space-y-4 border-slate-200">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <History className="w-4 h-4 text-emerald-600" />
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                Auditable Job Change Timeline ({changeHistory.length})
+              </h3>
+            </div>
+            <button
+              onClick={() => setShowHistory(false)}
+              className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+
+          {loadingHistory ? (
+            <LoadingSkeleton rows={2} />
+          ) : changeHistory.length === 0 ? (
+            <div className="p-4 text-center text-xs text-slate-500 bg-slate-50 rounded-xl">
+              Original Listing — No revisions recorded since publication.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {changeHistory.map((entry, idx) => (
+                <div key={entry._id || idx} className="p-4 rounded-xl bg-slate-50 border border-slate-100 text-xs space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Badge variant={entry.isMaterial ? 'amber' : 'slate'} size="sm">
+                        {entry.isMaterial ? 'Material Revision' : 'Minor Update'}
+                      </Badge>
+                      <span className="font-semibold text-slate-800">
+                        Updated by {entry.actor?.name || 'Employer'} ({entry.actorRole})
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-slate-400">
+                      {new Date(entry.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+
+                  {entry.reason && (
+                    <p className="text-slate-700 italic bg-white p-2.5 rounded-lg border border-slate-100">
+                      "{entry.reason}"
+                    </p>
+                  )}
+
+                  <div className="space-y-1.5 pt-1">
+                    {entry.changes.map((c, cIdx) => (
+                      <div key={cIdx} className="grid grid-cols-1 sm:grid-cols-3 gap-1 p-2 rounded-lg bg-white border border-slate-100 text-[11px]">
+                        <span className="font-semibold text-slate-700 capitalize">{c.field}</span>
+                        <span className="text-rose-600 line-through">
+                          {typeof c.oldValue === 'object' ? JSON.stringify(c.oldValue) : String(c.oldValue ?? 'None')}
+                        </span>
+                        <span className="text-emerald-700 font-semibold">
+                          &rarr; {typeof c.newValue === 'object' ? JSON.stringify(c.newValue) : String(c.newValue ?? 'None')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Two Column Layout: Details & Match Engine / Reliability */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Full Job Details */}
         <div className="lg:col-span-2 space-y-6">
@@ -419,13 +645,100 @@ export const JobDetailPage: React.FC = () => {
               </div>
             </div>
             <p className="text-[11px] text-slate-400">
-              * Payment is logged and monitored in platform records. Both worker and employer confirm shift completion upon checkout.
+              * Payment is recorded in platform ledgers. Both worker and employer confirm shift completion upon checkout.
             </p>
           </Card>
         </div>
 
-        {/* Right Column: AI Explainable Engine & Employer Info */}
+        {/* Right Column: AI Match Engine & Evidence-Based Employer Reliability */}
         <div className="space-y-6">
+          {/* Evidence-Based Employer Reliability Card */}
+          <Card className="p-5 space-y-4 border-slate-200">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Employer Reliability
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsReliabilityModalOpen(true)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Reliability explanation"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {reliability ? (
+              <div className="space-y-3 text-xs">
+                <div className="grid grid-cols-2 gap-2 text-center">
+                  <div className="p-2.5 rounded-xl bg-slate-50">
+                    <span className="text-slate-400 block text-[10px] uppercase">Completion Rate</span>
+                    <span className="text-base font-extrabold text-slate-900">
+                      {reliability.hasSufficientHistory
+                        ? `${reliability.metrics.completionRate}%`
+                        : '—'}
+                    </span>
+                    {!reliability.hasSufficientHistory && (
+                      <span className="block text-[10px] text-slate-400">Not enough history yet</span>
+                    )}
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-slate-50">
+                    <span className="text-slate-400 block text-[10px] uppercase">Finished Shifts</span>
+                    <span className="text-base font-extrabold text-slate-900">
+                      {reliability.metrics.completedAssignments}
+                    </span>
+                    <span className="block text-[10px] text-slate-400">Verified completions</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-1 border-t border-slate-100 text-slate-600">
+                  <div className="flex justify-between items-center">
+                    <span>Employer Cancellations:</span>
+                    <span className="font-semibold text-slate-800">
+                      {reliability.metrics.employerCancellations}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span>Substantiated Discrepancies:</span>
+                    <span className={`font-semibold ${reliability.metrics.substantiatedMismatches > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                      {reliability.metrics.substantiatedMismatches} substantiated
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span>Worker Shift Ratings:</span>
+                    <span className="font-semibold text-amber-600">
+                      ★ {reliability.metrics.ratingAverage || '—'} ({reliability.metrics.ratingCount} reviews)
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center pt-1 border-t border-slate-100">
+                    <span>Identity Status:</span>
+                    <Badge variant={reliability.identityVerificationStatus === 'verified' ? 'emerald' : 'slate'} size="sm">
+                      {reliability.identityVerificationStatus}
+                    </Badge>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setIsReliabilityModalOpen(true)}
+                  className="w-full text-center text-[11px] text-emerald-700 hover:text-emerald-800 font-semibold cursor-pointer pt-1"
+                >
+                  How are these metrics calculated? &rarr;
+                </button>
+              </div>
+            ) : (
+              <div className="p-3 text-center text-xs text-slate-500 bg-slate-50 rounded-xl">
+                Reliability metrics are being aggregated from persisted shifts.
+              </div>
+            )}
+          </Card>
+
+          {/* AI Match Breakdown */}
           {job.matchData ? (
             <ScoreBreakdown matchData={job.matchData} />
           ) : (
@@ -464,6 +777,57 @@ export const JobDetailPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Reliability Metrics Explanation Modal */}
+      <Modal
+        isOpen={isReliabilityModalOpen}
+        onClose={() => setIsReliabilityModalOpen(false)}
+        title="Evidence-Based Employer Reliability"
+        subtitle="Transparent, factual marketplace governance metrics"
+      >
+        <div className="space-y-4 text-xs text-slate-700 leading-relaxed">
+          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-950 space-y-1">
+            <span className="font-bold block">TrustTrack Governance Principle:</span>
+            <span>Every reliability metric is derived directly from immutable database records of completed shifts, substantiated investigations, and verified ratings. We never fabricate trust scores or badges.</span>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <strong className="text-slate-900 block mb-0.5">1. Completion Rate:</strong>
+              <p className="text-slate-600">
+                The ratio of completed shift assignments to all initiated assignments. Employers with fewer than 3 assignments display <em>"Not enough history yet"</em> to prevent misleading sample bias.
+              </p>
+            </div>
+
+            <div>
+              <strong className="text-slate-900 block mb-0.5">2. Substantiated Discrepancies:</strong>
+              <p className="text-slate-600">
+                Only reports that have been formally reviewed, investigated, and substantiated by platform administrators count toward this metric. Pending, investigating, or dismissed reports are strictly excluded.
+              </p>
+            </div>
+
+            <div>
+              <strong className="text-slate-900 block mb-0.5">3. Verified Ratings:</strong>
+              <p className="text-slate-600">
+                Reviews are restricted strictly to workers who have completed confirmed shift assignments with this employer. Fake or unverified reviews cannot be submitted.
+              </p>
+            </div>
+
+            <div>
+              <strong className="text-slate-900 block mb-0.5">4. Identity vs. Operational Reliability:</strong>
+              <p className="text-slate-600">
+                Identity verification certifies business documentation and registration. It is evaluated independently from historical shift fulfillment and punctuality.
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-2 flex justify-end">
+            <Button size="sm" onClick={() => setIsReliabilityModalOpen(false)}>
+              Got it
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Voluntary Application Modal */}
       <Modal
@@ -510,80 +874,124 @@ export const JobDetailPage: React.FC = () => {
           </div>
         ) : (
           <form onSubmit={handleApplySubmit} className="space-y-4">
-          <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-900 space-y-1">
-            <span className="font-bold block">Voluntary Application Guarantee:</span>
-            <span>You are voluntarily choosing to apply. Notifications will never apply for you automatically. Employer reviews and confirms candidates.</span>
-          </div>
+            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-900 space-y-1">
+              <span className="font-bold block">Voluntary Application Guarantee:</span>
+              <span>You are voluntarily choosing to apply. Employer reviews and confirms candidates. Confirmed terms are protected by TrustTrack.</span>
+            </div>
 
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1.5">
-              Personal Message to Employer (Optional)
-            </label>
-            <textarea
-              rows={4}
-              value={applyMessage}
-              onChange={(e) => setApplyMessage(e.target.value)}
-              placeholder="Highlight any relevant past experience, your punctuality, or why you'd be a great fit for this shift..."
-              className="w-full text-xs p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            />
-          </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                Personal Message to Employer (Optional)
+              </label>
+              <textarea
+                rows={4}
+                value={applyMessage}
+                onChange={(e) => setApplyMessage(e.target.value)}
+                placeholder="Highlight any relevant past experience, your punctuality, or why you'd be a great fit for this shift..."
+                className="w-full text-xs p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+            </div>
 
-          <div className="pt-2 flex justify-end gap-2">
-            <Button variant="ghost" size="sm" type="button" onClick={() => setIsApplyModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button size="sm" type="submit" isLoading={isApplying} leftIcon={<Send className="w-3.5 h-3.5" />}>
-              Submit Application
-            </Button>
-          </div>
-        </form>
+            <div className="pt-2 flex justify-end gap-2">
+              <Button variant="ghost" size="sm" type="button" onClick={() => setIsApplyModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" type="submit" isLoading={isApplying} leftIcon={<Send className="w-3.5 h-3.5" />}>
+                Submit Application
+              </Button>
+            </div>
+          </form>
         )}
       </Modal>
 
-      {/* Incident Report Modal */}
+      {/* Incident / Discrepancy Report Modal */}
       <Modal
         isOpen={isReportModalOpen}
         onClose={() => setIsReportModalOpen(false)}
-        title="Report Job Listing"
-        subtitle="Submit confidential report to Trust & Safety"
+        title="Report Job Discrepancy or Incident"
+        subtitle="Submit confidential report to Trust & Safety moderation"
       >
-        <form onSubmit={handleReportSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1.5">Reason for Report</label>
-            <select
-              value={reportCategory}
-              onChange={(e) => setReportCategory(e.target.value)}
-              className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none"
-            >
-              <option value="misleading_job">Misleading Job Details or Pay</option>
-              <option value="scam_or_fraud">Suspected Scam or Fee Demand</option>
-              <option value="unsafe_conditions">Unsafe Work Conditions</option>
-              <option value="harassment">Inappropriate Conduct</option>
-              <option value="other">Other Violation</option>
-            </select>
+        {reportSuccessFeedback ? (
+          <div className="space-y-4 text-center py-4">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Report Submitted to Trust & Safety</h3>
+              <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                Thank you for protecting the WorkMatch marketplace. Our moderation team has received your report and will thoroughly investigate any wage, schedule, or condition discrepancy.
+              </p>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              * Your identity is kept confidential. Employers are never automatically penalized without substantiated administrative review.
+            </p>
+            <div className="pt-2">
+              <Button size="sm" onClick={() => setIsReportModalOpen(false)}>
+                Dismiss
+              </Button>
+            </div>
           </div>
+        ) : (
+          <form onSubmit={handleReportSubmit} className="space-y-4">
+            <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-600 flex items-start gap-2">
+              <Info className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+              <span>
+                WorkMatch TrustTrack protects workers against wage discrepancies, inaccurate hours, and unauthorized duties. Reports are confidential and reviewed by human moderators.
+              </span>
+            </div>
 
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1.5">Description & Evidence</label>
-            <textarea
-              rows={4}
-              required
-              value={reportDescription}
-              onChange={(e) => setReportDescription(e.target.value)}
-              placeholder="Provide specific details about what occurred..."
-              className="w-full text-xs p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-rose-500"
-            />
-          </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1.5">Discrepancy Category</label>
+              <select
+                value={reportCategory}
+                onChange={(e) => setReportCategory(e.target.value)}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none cursor-pointer"
+              >
+                <option value="pay_mismatch">Pay differs from listing (Offered less / unpaid)</option>
+                <option value="schedule_mismatch">Shift timing or hours differ from listing</option>
+                <option value="location_mismatch">Location differs from listing address</option>
+                <option value="duties_mismatch">Actual duties differ significantly from listing</option>
+                <option value="unexpected_cancellation">Job cancelled unexpectedly without notice</option>
+                <option value="misleading_job">Other misleading or inaccurate job details</option>
+                <option value="unsafe_conditions">Unsafe work conditions</option>
+                <option value="scam_or_fraud">Suspected scam, fee demand, or wage theft</option>
+                <option value="other">Other concern</option>
+              </select>
+            </div>
 
-          <div className="pt-2 flex justify-end gap-2">
-            <Button variant="ghost" size="sm" type="button" onClick={() => setIsReportModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="danger" size="sm" type="submit" isLoading={isReporting}>
-              Submit Report
-            </Button>
-          </div>
-        </form>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1.5">What differed from the advertised opening?</label>
+              <textarea
+                rows={3}
+                required
+                value={reportDescription}
+                onChange={(e) => setReportDescription(e.target.value)}
+                placeholder="Explain the specific difference between the listing and reality..."
+                className="w-full text-xs p-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-rose-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1.5">Supporting Evidence or Notes (Optional)</label>
+              <textarea
+                rows={2}
+                value={reportEvidence}
+                onChange={(e) => setReportEvidence(e.target.value)}
+                placeholder="Mention any text messages, employer statements, or shift communications..."
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <Button variant="ghost" size="sm" type="button" onClick={() => setIsReportModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="danger" size="sm" type="submit" isLoading={isReporting}>
+                Submit Discrepancy Report
+              </Button>
+            </div>
+          </form>
+        )}
       </Modal>
     </div>
   );

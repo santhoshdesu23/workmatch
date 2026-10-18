@@ -120,7 +120,10 @@ const jobSchema = new mongoose.Schema(
     },
     applicationDeadline: {
       type: Date,
-      required: true
+      required: true,
+      default: function () {
+        return this.workDate || new Date();
+      }
     },
     cancellationPolicy: {
       type: String,
@@ -139,6 +142,18 @@ const jobSchema = new mongoose.Schema(
     applicationsCount: {
       type: Number,
       default: 0
+    },
+    detailsConfirmed: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    detailsConfirmedAt: {
+      type: Date
+    },
+    detailsConfirmedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
     }
   },
   {

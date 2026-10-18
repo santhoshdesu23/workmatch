@@ -22,8 +22,10 @@ import {
 } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
+import { useAuth } from '../../context/AuthContext';
 
 export const LandingPage: React.FC = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -68,16 +70,61 @@ export const LandingPage: React.FC = () => {
 
           {/* Quick CTA Buttons */}
           <div className="mt-8 flex flex-wrap justify-center items-center gap-4">
-            <Link to="/jobs">
-              <Button size="lg" rightIcon={<ArrowRight className="w-4 h-4" />}>
-                Find Work Now
-              </Button>
-            </Link>
-            <Link to="/register?role=employer">
-              <Button variant="outline" size="lg" leftIcon={<Building2 className="w-4 h-4" />}>
-                Hire Workers
-              </Button>
-            </Link>
+            {user ? (
+              user.role === 'worker' ? (
+                <>
+                  <Link to="/jobs">
+                    <Button size="lg" rightIcon={<ArrowRight className="w-4 h-4" />}>
+                      Explore Open Shifts
+                    </Button>
+                  </Link>
+                  <Link to="/worker/hub">
+                    <Button variant="outline" size="lg" leftIcon={<Sparkles className="w-4 h-4" />}>
+                      Go to Worker Hub
+                    </Button>
+                  </Link>
+                </>
+              ) : user.role === 'employer' ? (
+                <>
+                  <Link to="/employer/jobs/create">
+                    <Button size="lg" rightIcon={<ArrowRight className="w-4 h-4" />}>
+                      Post a New Shift
+                    </Button>
+                  </Link>
+                  <Link to="/employer/dashboard">
+                    <Button variant="outline" size="lg" leftIcon={<Building2 className="w-4 h-4" />}>
+                      Employer Dashboard
+                    </Button>
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link to="/admin/dashboard">
+                    <Button size="lg" rightIcon={<ArrowRight className="w-4 h-4" />}>
+                      Admin Dashboard
+                    </Button>
+                  </Link>
+                  <Link to="/admin/reports">
+                    <Button variant="outline" size="lg">
+                      Review Reports
+                    </Button>
+                  </Link>
+                </>
+              )
+            ) : (
+              <>
+                <Link to="/jobs">
+                  <Button size="lg" rightIcon={<ArrowRight className="w-4 h-4" />}>
+                    Find Work Now
+                  </Button>
+                </Link>
+                <Link to="/register?role=employer">
+                  <Button variant="outline" size="lg" leftIcon={<Building2 className="w-4 h-4" />}>
+                    Hire Workers
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Search Card */}
@@ -320,24 +367,93 @@ export const LandingPage: React.FC = () => {
       {/* Call to Action Banner */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-slate-900 rounded-3xl p-8 sm:p-14 text-white text-center space-y-6">
-          <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">
-            Ready to find flexible local work?
-          </h2>
-          <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto leading-relaxed">
-            Join vetted workers and employers on WorkMatch today. No hidden agency cuts. No fabricated metrics. Real local opportunities.
-          </p>
-          <div className="flex flex-wrap justify-center gap-4 pt-2">
-            <Link to="/register">
-              <Button size="lg" className="bg-emerald-500 hover:bg-emerald-600 text-white">
-                Create Free Account
-              </Button>
-            </Link>
-            <Link to="/jobs">
-              <Button variant="outline" size="lg" className="border-slate-700 text-white hover:bg-slate-800">
-                Explore Open Shifts
-              </Button>
-            </Link>
-          </div>
+          {user ? (
+            user.role === 'worker' ? (
+              <>
+                <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">
+                  Welcome back, {user.name}!
+                </h2>
+                <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto leading-relaxed">
+                  Explore new shifts matching your skills, manage your applications, and track your active shift schedules.
+                </p>
+                <div className="flex flex-wrap justify-center gap-4 pt-2">
+                  <Link to="/worker/hub">
+                    <Button size="lg" className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                      Go to Worker Hub
+                    </Button>
+                  </Link>
+                  <Link to="/jobs">
+                    <Button variant="outline" size="lg" className="!bg-slate-800 !border-slate-700 !text-white hover:!bg-slate-700">
+                      Explore Open Shifts
+                    </Button>
+                  </Link>
+                </div>
+              </>
+            ) : user.role === 'employer' ? (
+              <>
+                <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">
+                  Ready to post your next shift?
+                </h2>
+                <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto leading-relaxed">
+                  Publish transparent job details with TrustTrack verification and connect with vetted local workers in minutes.
+                </p>
+                <div className="flex flex-wrap justify-center gap-4 pt-2">
+                  <Link to="/employer/jobs/create">
+                    <Button size="lg" className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                      Post a New Shift
+                    </Button>
+                  </Link>
+                  <Link to="/employer/dashboard">
+                    <Button variant="outline" size="lg" className="!bg-slate-800 !border-slate-700 !text-white hover:!bg-slate-700">
+                      Employer Dashboard
+                    </Button>
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">
+                  WorkMatch Platform Administration
+                </h2>
+                <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto leading-relaxed">
+                  Manage marketplace trust, resolve worker discrepancy reports, and review immutable audit logs.
+                </p>
+                <div className="flex flex-wrap justify-center gap-4 pt-2">
+                  <Link to="/admin/dashboard">
+                    <Button size="lg" className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                      Admin Dashboard
+                    </Button>
+                  </Link>
+                  <Link to="/admin/reports">
+                    <Button variant="outline" size="lg" className="!bg-slate-800 !border-slate-700 !text-white hover:!bg-slate-700">
+                      Review Reports
+                    </Button>
+                  </Link>
+                </div>
+              </>
+            )
+          ) : (
+            <>
+              <h2 className="text-2xl sm:text-4xl font-bold tracking-tight">
+                Ready to find flexible local work?
+              </h2>
+              <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto leading-relaxed">
+                Join vetted workers and employers on WorkMatch today. No hidden agency cuts. No fabricated metrics. Real local opportunities.
+              </p>
+              <div className="flex flex-wrap justify-center gap-4 pt-2">
+                <Link to="/register">
+                  <Button size="lg" className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                    Create Free Account
+                  </Button>
+                </Link>
+                <Link to="/jobs">
+                  <Button variant="outline" size="lg" className="!bg-slate-800 !border-slate-700 !text-white hover:!bg-slate-700">
+                    Explore Open Shifts
+                  </Button>
+                </Link>
+              </div>
+            </>
+          )}
         </div>
       </section>
     </div>

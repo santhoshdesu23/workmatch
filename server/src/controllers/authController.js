@@ -376,7 +376,7 @@ export const changePassword = async (req, res, next) => {
 
 export const verifyEmail = async (req, res, next) => {
   try {
-    const rawToken = req.body?.token || req.query?.token;
+    const rawToken = req.body?.token;
     if (!rawToken || typeof rawToken !== 'string') {
       return res.status(400).json({
         success: false,
@@ -385,10 +385,19 @@ export const verifyEmail = async (req, res, next) => {
     }
 
     const hashedToken = crypto.createHash('sha256').update(rawToken.trim()).digest('hex');
-    const user = await User.findOne({
-      emailVerificationToken: hashedToken,
-      emailVerificationExpires: { $gt: new Date() }
-    });
+
+    // Atomic conditional consumption: guarantees only exactly one concurrent request can consume the token
+    const user = await User.findOneAndUpdate(
+      {
+        emailVerificationToken: hashedToken,
+        emailVerificationExpires: { $gt: new Date() }
+      },
+      {
+        $set: { emailVerified: true },
+        $unset: { emailVerificationToken: 1, emailVerificationExpires: 1 }
+      },
+      { new: true }
+    );
 
     if (!user) {
       return res.status(400).json({
@@ -396,11 +405,6 @@ export const verifyEmail = async (req, res, next) => {
         message: 'Email verification token is invalid or has expired.'
       });
     }
-
-    user.emailVerified = true;
-    user.emailVerificationToken = undefined;
-    user.emailVerificationExpires = undefined;
-    await user.save();
 
     res.status(200).json({
       success: true,

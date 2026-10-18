@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Sparkles,
   MapPin,
@@ -25,9 +25,11 @@ import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { EmptyState } from '../../components/common/EmptyState';
 
 export const WorkerRecommendationsPage: React.FC = () => {
+  const navigate = useNavigate();
   const { success, error: toastError, info } = useToast();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [requiresProfileCompletion, setRequiresProfileCompletion] = useState<boolean>(false);
 
   // AI Explanation Modal
   const [explainingJob, setExplainingJob] = useState<Job | null>(null);
@@ -46,6 +48,7 @@ export const WorkerRecommendationsPage: React.FC = () => {
       const res = await api.get('/recommendations/jobs');
       if (res.data?.success) {
         setJobs(res.data.recommendations || []);
+        setRequiresProfileCompletion(Boolean(res.data.requiresProfileCompletion));
       }
     } catch (err: any) {
       toastError(err.message || 'Failed to fetch recommendations.');
@@ -116,13 +119,23 @@ export const WorkerRecommendationsPage: React.FC = () => {
       </div>
 
       {jobs.length === 0 ? (
-        <EmptyState
-          icon={Sparkles}
-          title="No recommendations calculated"
-          description="Update your skills and availability in your profile to trigger match evaluation."
-          actionText="Edit Worker Profile"
-          onAction={() => (window.location.href = '/worker/profile')}
-        />
+        requiresProfileCompletion ? (
+          <EmptyState
+            icon={Sparkles}
+            title="Complete Your Profile to Get AI Matches"
+            description="Add your skills and work preferences so WorkMatch can find relevant opportunities for you."
+            actionText="Edit Worker Profile"
+            onAction={() => navigate('/worker/profile')}
+          />
+        ) : (
+          <EmptyState
+            icon={Sparkles}
+            title="No matching jobs found yet."
+            description="Try updating your skills or preferences, or check again later."
+            actionText="Update Skills & Preferences"
+            onAction={() => navigate('/worker/profile')}
+          />
+        )
       ) : (
         <div className="space-y-6">
           {jobs.map((job) => (

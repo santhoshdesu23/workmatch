@@ -86,7 +86,7 @@ export const getUserReviews = async (req, res, next) => {
     const { userId } = req.params;
     const reviews = await Review.find({ reviewee: userId, status: 'published' })
       .populate('reviewer', 'name')
-      .populate('assignment')
+      .populate('assignment', 'agreedSchedule.workDate agreedSchedule.totalHours agreedSchedule.startTime agreedSchedule.endTime')
       .sort({ createdAt: -1 })
       .lean();
 

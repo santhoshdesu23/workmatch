@@ -31,6 +31,7 @@ export const WorkerDashboardPage: React.FC = () => {
 
   const [profile, setProfile] = useState<WorkerProfile | null>(null);
   const [recommendations, setRecommendations] = useState<Job[]>([]);
+  const [requiresProfileCompletion, setRequiresProfileCompletion] = useState<boolean>(false);
   const [applications, setApplications] = useState<Application[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -49,7 +50,10 @@ export const WorkerDashboardPage: React.FC = () => {
         ]);
 
         if (profRes.data?.success) setProfile(profRes.data.profile);
-        if (recRes.data?.success) setRecommendations(recRes.data.recommendations || []);
+        if (recRes.data?.success) {
+          setRecommendations(recRes.data.recommendations || []);
+          setRequiresProfileCompletion(Boolean(recRes.data.requiresProfileCompletion));
+        }
         if (appRes.data?.success) setApplications(appRes.data.applications || []);
         if (assignRes.data?.success) setAssignments(assignRes.data.assignments || []);
         if (notifRes.data?.success) setNotifications(notifRes.data.notifications?.slice(0, 4) || []);
@@ -204,7 +208,24 @@ export const WorkerDashboardPage: React.FC = () => {
 
           {recommendations.length === 0 ? (
             <Card className="p-6 text-center text-xs text-slate-500">
-              No recommendations calculated yet. Check open shifts in the discover tab.
+              {requiresProfileCompletion ? (
+                <div className="space-y-2 py-2">
+                  <p className="font-semibold text-slate-800 text-sm">Complete Your Profile to Get AI Matches</p>
+                  <p className="text-slate-500 max-w-sm mx-auto">Add your skills and work preferences so WorkMatch can find relevant opportunities for you.</p>
+                  <div className="pt-1">
+                    <Link to="/worker/profile">
+                      <Button size="sm" variant="outline">
+                        Edit Worker Profile
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <p className="font-semibold text-slate-800">No matching jobs found yet.</p>
+                  <p className="text-slate-500">Try updating your skills or preferences, or check again later.</p>
+                </div>
+              )}
             </Card>
           ) : (
             <div className="space-y-3">

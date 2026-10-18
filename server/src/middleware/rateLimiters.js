@@ -55,7 +55,8 @@ export function getRateLimiterTopology() {
 // Auth endpoints rate limiter (strict protection against brute-force & credential stuffing)
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isTest ? 1000 : 15, // 15 attempts per 15 minutes in non-test
+  max: isTest || !isProduction ? 1000 : 30, // Generous in development/testing, strict in production
+  skip: (req) => req.method === 'GET', // Session validation (e.g. GET /api/auth/me) should not count against auth brute-force quota
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: resolveClientIp,
@@ -138,10 +139,37 @@ export const applicationRateLimiter = rateLimit({
   }
 });
 
+let testGeneralLimit = null;
+export const _setTestGeneralLimit = (limit) => {
+  testGeneralLimit = limit;
+};
+
+export const _resetGeneralApiLimiter = () => {
+  if (generalApiLimiter && typeof generalApiLimiter.resetKey === 'function') {
+    generalApiLimiter.resetKey('127.0.0.1');
+    generalApiLimiter.resetKey('::1');
+    generalApiLimiter.resetKey('::ffff:127.0.0.1');
+  }
+};
+
 // General API baseline limiter
 export const generalApiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isTest ? 5000 : 800,
+  max: (req, res) => {
+    if (testGeneralLimit !== null) return testGeneralLimit;
+    return isTest ? 5000 : 800;
+  },
+  skip: (req) => {
+    const p = req.path || '';
+    return (
+      p === '/health' ||
+      p === '/health/ready' ||
+      p === '/api/health' ||
+      p === '/api/health/ready' ||
+      p === '/' ||
+      p === '/api'
+    );
+  },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: resolveClientIp,

@@ -164,9 +164,11 @@ export const getJobApplicants = async (req, res, next) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    // Fetch worker profiles to calculate compatibility score and show skills
+    // Fetch worker profiles to calculate compatibility score and show skills (strictly omitting private bookmarks like savedJobs)
     const workerIds = applications.map((a) => a.worker?._id).filter(Boolean);
-    const profiles = await WorkerProfile.find({ user: { $in: workerIds } }).lean();
+    const profiles = await WorkerProfile.find({ user: { $in: workerIds } })
+      .select('user bio skills experienceSummary preferredCategories location travelRadiusKm availability expectedPay languages verificationStatus rating completedJobsCount')
+      .lean();
     const profileMap = new Map();
     profiles.forEach((p) => profileMap.set(p.user.toString(), p));
 
@@ -522,3 +524,51 @@ export const respondToOffer = async (req, res, next) => {
     next(error);
   }
 };
+
+export const reconfirmInterest = async (req, res, next) => {
+  try {
+    const { applicationId } = req.params;
+    const application = await Application.findById(applicationId).populate('job');
+    if (!application) {
+      return res.status(404).json({ success: false, message: 'Application not found.' });
+    }
+
+    if (application.worker.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Unauthorized.' });
+    }
+
+    if (application.status === APPLICATION_STATUSES.WITHDRAWN || application.status === APPLICATION_STATUSES.CANCELLED) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot reconfirm an application that is ${application.status.toLowerCase()}.`
+      });
+    }
+
+    application.decisionHistory.push({
+      status: application.status,
+      note: 'Applicant acknowledged job updates and reconfirmed interest in position',
+      changedBy: req.user._id,
+      timestamp: new Date()
+    });
+    await application.save();
+
+    if (application.job?.employer) {
+      await createNotification({
+        recipient: application.job.employer,
+        type: 'APPLICATION_STATUS',
+        title: `Candidate Reconfirmed Interest: ${application.job.title}`,
+        message: `${req.user.name} reviewed the latest job updates for "${application.job.title}" and reconfirmed their interest.`,
+        link: `/employer/jobs/${application.job._id}/applicants`
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Interest in updated shift terms successfully reconfirmed.',
+      application
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

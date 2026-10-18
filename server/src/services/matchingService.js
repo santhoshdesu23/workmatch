@@ -35,6 +35,32 @@ export function calculateDistanceKm(lat1, lon1, lat2, lon2) {
 }
 
 /**
+ * Normalizes and sanitizes an array of skill strings.
+ * Filters out non-strings, null, undefined, empty/whitespace-only items.
+ * Trims surrounding whitespace and deduplicates case-insensitively.
+ */
+export function sanitizeSkills(skills) {
+  if (!skills || !Array.isArray(skills)) return [];
+  const seen = new Set();
+  const result = [];
+
+  for (const s of skills) {
+    if (typeof s === 'string') {
+      const trimmed = s.trim();
+      if (trimmed.length > 0) {
+        const lower = trimmed.toLowerCase();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          result.push(trimmed);
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * Normalizes text for skill comparison
  */
 function normalizeSkill(str) {
@@ -46,8 +72,8 @@ function normalizeSkill(str) {
  * Evaluates skill matching
  */
 export function evaluateSkillsScore(workerSkills = [], requiredSkills = []) {
-  const safeRequired = Array.isArray(requiredSkills) ? requiredSkills.filter(Boolean) : [];
-  const safeWorker = Array.isArray(workerSkills) ? workerSkills.filter(Boolean) : [];
+  const safeRequired = sanitizeSkills(requiredSkills);
+  const safeWorker = sanitizeSkills(workerSkills);
 
   if (safeRequired.length === 0) {
     return {
@@ -60,7 +86,7 @@ export function evaluateSkillsScore(workerSkills = [], requiredSkills = []) {
 
   if (safeWorker.length === 0) {
     return {
-      score: 0.1, // Minimum floor for no skills declared
+      score: 0.0,
       matchedSkills: [],
       missingSkills: safeRequired,
       explanation: 'Add your skills to your profile to improve matching accuracy.'
@@ -74,7 +100,7 @@ export function evaluateSkillsScore(workerSkills = [], requiredSkills = []) {
   for (const req of safeRequired) {
     const normReq = normalizeSkill(req);
     const hasMatch = normalizedWorkerSkills.some(
-      (w) => w === normReq || w.includes(normReq) || normReq.includes(w)
+      (w) => w === normReq || (w.length >= 3 && normReq.includes(w)) || (normReq.length >= 3 && w.includes(normReq))
     );
     if (hasMatch) {
       matched.push(req);
@@ -83,7 +109,7 @@ export function evaluateSkillsScore(workerSkills = [], requiredSkills = []) {
     }
   }
 
-  const score = matched.length / safeRequired.length;
+  const score = safeRequired.length > 0 ? matched.length / safeRequired.length : 1.0;
   const explanation = `${matched.length} of ${safeRequired.length} required skill${
     safeRequired.length === 1 ? '' : 's'
   } match your profile.`;
@@ -297,7 +323,7 @@ export function calculateProfileCompleteness(profile) {
   let filled = 0;
   let total = 6;
 
-  if (profile.skills && profile.skills.length > 0) filled++;
+  if (sanitizeSkills(profile?.skills).length > 0) filled++;
   if (profile.bio && profile.bio.trim().length > 10) filled++;
   if (profile.preferredCategories && profile.preferredCategories.length > 0) filled++;
   if (profile.preferredLocationName || (profile.location?.coordinates && profile.location.coordinates[0] !== 0)) filled++;
@@ -337,6 +363,9 @@ export function computeJobMatch(workerProfile, job) {
   ];
 
   const warnings = [];
+  if (sanitizeSkills(workerProfile?.skills).length === 0) {
+    warnings.push('No skills declared in worker profile; matches are limited.');
+  }
   if (workerProfile?.availability && !workerProfile.availability.isAvailable) {
     warnings.push('Your profile is marked unavailable.');
   }

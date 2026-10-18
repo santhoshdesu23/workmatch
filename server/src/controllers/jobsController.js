@@ -2,10 +2,31 @@ import { Job } from '../models/Job.js';
 import { WorkerProfile } from '../models/WorkerProfile.js';
 import { EmployerProfile } from '../models/EmployerProfile.js';
 import { Application } from '../models/Application.js';
+import { Assignment } from '../models/Assignment.js';
+import { PaymentRecord } from '../models/PaymentRecord.js';
 import { User } from '../models/User.js';
-import { JOB_STATUSES, ROLES } from '../config/constants.js';
+import { JobChangeHistory } from '../models/JobChangeHistory.js';
+import { JOB_STATUSES, ROLES, ASSIGNMENT_STATUSES, PAYMENT_STATUSES } from '../config/constants.js';
 import { computeJobMatch, calculateDistanceKm } from '../services/matchingService.js';
 import { createNotification } from '../services/notificationService.js';
+import { computeEmployerReliability } from '../services/reliabilityService.js';
+
+const MATERIAL_FIELDS = [
+  'title',
+  'description',
+  'category',
+  'grossPay',
+  'payBasis',
+  'workDate',
+  'startTime',
+  'endTime',
+  'totalHours',
+  'locationName',
+  'openings',
+  'requiredSkills',
+  'cancellationPolicy',
+  'applicationDeadline'
+];
 
 export const getJobs = async (req, res, next) => {
   try {
@@ -165,6 +186,8 @@ export const getJobById = async (req, res, next) => {
     Job.findByIdAndUpdate(jobId, { $inc: { viewsCount: 1 } }).exec();
 
     const empProfile = await EmployerProfile.findOne({ user: job.employer?._id }).lean();
+    const employerReliability = await computeEmployerReliability(job.employer?._id);
+    const changeHistoryCount = await JobChangeHistory.countDocuments({ job: jobId });
 
     let userApplication = null;
     let matchData = null;
@@ -193,10 +216,35 @@ export const getJobById = async (req, res, next) => {
               publicContact: empProfile.publicContact
             }
           : null,
+        employerReliability,
+        changeHistoryCount,
         matchData,
         userApplication,
         isSaved
       }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getJobHistory = async (req, res, next) => {
+  try {
+    const { jobId } = req.params;
+    const job = await Job.findById(jobId).select('_id title employer').lean();
+    if (!job) {
+      return res.status(404).json({ success: false, message: 'Job posting not found.' });
+    }
+
+    const history = await JobChangeHistory.find({ job: jobId })
+      .populate('actor', 'name role')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      jobId,
+      history
     });
   } catch (error) {
     next(error);
@@ -241,27 +289,78 @@ export const createJob = async (req, res, next) => {
       ageRestriction,
       applicationDeadline,
       cancellationPolicy,
+      detailsConfirmed = true,
       status = JOB_STATUSES.OPEN
     } = req.body;
 
+    // Validation checks
+    if (!title || title.trim().length < 3) {
+      return res.status(400).json({ success: false, message: 'Job title is required (at least 3 characters).' });
+    }
+    if (!description || description.trim().length < 10) {
+      return res.status(400).json({ success: false, message: 'Job description is required (at least 10 characters).' });
+    }
+    if (!locationName || !locationName.trim()) {
+      return res.status(400).json({ success: false, message: 'Location address or venue description is required.' });
+    }
+    if (!workDate) {
+      return res.status(400).json({ success: false, message: 'Work date is required.' });
+    }
+
+    const parsedWorkDate = new Date(workDate);
+    if (isNaN(parsedWorkDate.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid work date format.' });
+    }
+
+    // Work date must not be in the past (allow timezone buffer)
+    const minAllowedDate = new Date();
+    minAllowedDate.setHours(0, 0, 0, 0);
+    minAllowedDate.setDate(minAllowedDate.getDate() - 1);
+    if (parsedWorkDate < minAllowedDate) {
+      return res.status(400).json({ success: false, message: 'Work date cannot be in the past.' });
+    }
+
+    if (!startTime || !endTime) {
+      return res.status(400).json({ success: false, message: 'Shift start and end times are required.' });
+    }
+
+    const parsedGrossPay = Number(grossPay);
+    if (isNaN(parsedGrossPay) || parsedGrossPay <= 0) {
+      return res.status(400).json({ success: false, message: 'Gross pay must be a positive number.' });
+    }
+
+    const parsedTotalHours = Number(totalHours);
+    if (isNaN(parsedTotalHours) || parsedTotalHours <= 0) {
+      return res.status(400).json({ success: false, message: 'Total hours must be greater than zero.' });
+    }
+
+    if (applicationDeadline) {
+      const parsedDeadline = new Date(applicationDeadline);
+      if (isNaN(parsedDeadline.getTime())) {
+        return res.status(400).json({ success: false, message: 'Invalid application deadline format.' });
+      }
+    }
+
+    const isConfirmed = detailsConfirmed !== false;
+
     const job = await Job.create({
       employer: employerId,
-      title,
-      description,
+      title: title.trim(),
+      description: description.trim(),
       category,
       requiredSkills: Array.isArray(requiredSkills) ? requiredSkills : (requiredSkills || '').split(',').map((s) => s.trim()).filter(Boolean),
       openings: Number(openings) || 1,
-      locationName,
+      locationName: locationName.trim(),
       location: {
         type: 'Point',
         coordinates: coordinates && coordinates.length === 2 ? coordinates : [0, 0]
       },
-      workDate,
+      workDate: parsedWorkDate,
       startTime,
       endTime,
       breakDurationMinutes: Number(breakDurationMinutes) || 0,
-      totalHours: Number(totalHours) || 1,
-      grossPay: Number(grossPay),
+      totalHours: parsedTotalHours,
+      grossPay: parsedGrossPay,
       payBasis,
       currency,
       paymentMethod,
@@ -270,8 +369,11 @@ export const createJob = async (req, res, next) => {
       dressCode,
       physicalRequirements,
       ageRestriction,
-      applicationDeadline: applicationDeadline || workDate,
+      applicationDeadline: applicationDeadline ? new Date(applicationDeadline) : parsedWorkDate,
       cancellationPolicy,
+      detailsConfirmed: isConfirmed,
+      detailsConfirmedAt: isConfirmed ? new Date() : null,
+      detailsConfirmedBy: isConfirmed ? employerId : null,
       status
     });
 
@@ -313,21 +415,220 @@ export const updateJob = async (req, res, next) => {
       });
     }
 
-    const updates = { ...req.body };
-    if (updates.coordinates && updates.coordinates.length === 2) {
-      updates.location = { type: 'Point', coordinates: updates.coordinates };
-      delete updates.coordinates;
-    }
-    if (typeof updates.requiredSkills === 'string') {
-      updates.requiredSkills = updates.requiredSkills.split(',').map((s) => s.trim()).filter(Boolean);
+    if (job.status === JOB_STATUSES.CANCELLED || job.status === JOB_STATUSES.COMPLETED) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot edit a ${job.status.toLowerCase()} job posting.`
+      });
     }
 
-    const updatedJob = await Job.findByIdAndUpdate(jobId, updates, { new: true, runValidators: true });
+    // Explicit field whitelisting to eliminate mass-assignment vulnerabilities.
+    // Privileged/internal fields (employer, filledCount, status, applicationsCount, viewsCount) are strictly forbidden.
+    const allowedFields = [
+      'title',
+      'description',
+      'category',
+      'requiredSkills',
+      'openings',
+      'locationName',
+      'workDate',
+      'startTime',
+      'endTime',
+      'breakDurationMinutes',
+      'totalHours',
+      'grossPay',
+      'payBasis',
+      'currency',
+      'paymentMethod',
+      'paymentTiming',
+      'experienceRequirement',
+      'dressCode',
+      'physicalRequirements',
+      'ageRestriction',
+      'applicationDeadline',
+      'cancellationPolicy'
+    ];
+
+    const safeUpdates = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        safeUpdates[field] = req.body[field];
+      }
+    }
+
+    // Validate grossPay
+    if (safeUpdates.grossPay !== undefined) {
+      const parsedPay = Number(safeUpdates.grossPay);
+      if (isNaN(parsedPay) || parsedPay <= 0) {
+        return res.status(400).json({ success: false, message: 'Gross pay must be a positive number.' });
+      }
+      safeUpdates.grossPay = parsedPay;
+    }
+
+    // Validate totalHours
+    if (safeUpdates.totalHours !== undefined) {
+      const parsedHours = Number(safeUpdates.totalHours);
+      if (isNaN(parsedHours) || parsedHours <= 0) {
+        return res.status(400).json({ success: false, message: 'Total hours must be greater than zero.' });
+      }
+      safeUpdates.totalHours = parsedHours;
+    }
+
+    // Validate workDate
+    if (safeUpdates.workDate !== undefined) {
+      const parsedDate = new Date(safeUpdates.workDate);
+      if (isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ success: false, message: 'Invalid work date format.' });
+      }
+      safeUpdates.workDate = parsedDate;
+    }
+
+    // Validate openings against current commitments
+    if (safeUpdates.openings !== undefined) {
+      const parsedOpenings = Number(safeUpdates.openings);
+      if (isNaN(parsedOpenings) || parsedOpenings < 1) {
+        return res.status(400).json({ success: false, message: 'Openings must be a positive number.' });
+      }
+      if (parsedOpenings < job.filledCount) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot reduce openings to ${parsedOpenings}: ${job.filledCount} candidate(s) are already hired for this position.`
+        });
+      }
+      safeUpdates.openings = parsedOpenings;
+    }
+
+    // Protection of active assignments: prevent reducing pay or changing schedule under active commitments
+    const activeAssignmentsCount = await Assignment.countDocuments({
+      job: jobId,
+      status: { $in: [ASSIGNMENT_STATUSES.CONFIRMED, ASSIGNMENT_STATUSES.IN_PROGRESS] }
+    });
+
+    if (activeAssignmentsCount > 0) {
+      if (safeUpdates.grossPay !== undefined && safeUpdates.grossPay < job.grossPay) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot reduce pay rate from $${job.grossPay} to $${safeUpdates.grossPay}: ${activeAssignmentsCount} candidate(s) are already confirmed for this shift.`
+        });
+      }
+      if (
+        (safeUpdates.workDate !== undefined && new Date(safeUpdates.workDate).toISOString().slice(0, 10) !== new Date(job.workDate).toISOString().slice(0, 10)) ||
+        (safeUpdates.startTime !== undefined && safeUpdates.startTime !== job.startTime) ||
+        (safeUpdates.endTime !== undefined && safeUpdates.endTime !== job.endTime)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot alter work date or shift times while ${activeAssignmentsCount} active shift assignment(s) are confirmed. Contact workers and administration directly to reschedule.`
+        });
+      }
+    }
+
+    if (req.body.coordinates && Array.isArray(req.body.coordinates) && req.body.coordinates.length === 2) {
+      safeUpdates.location = { type: 'Point', coordinates: req.body.coordinates };
+    }
+
+    if (typeof safeUpdates.requiredSkills === 'string') {
+      safeUpdates.requiredSkills = safeUpdates.requiredSkills.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+
+    // Ensure employer ownership cannot be modified
+    safeUpdates.employer = job.employer;
+
+    // Detect changes and calculate diff for change history
+    const changes = [];
+    const changedFieldNames = [];
+    let hasMaterialChange = false;
+
+    for (const key of allowedFields) {
+      if (safeUpdates[key] !== undefined) {
+        const oldVal = job[key];
+        const newVal = safeUpdates[key];
+        let isDiff = false;
+
+        if (key === 'workDate' || key === 'applicationDeadline') {
+          isDiff = new Date(oldVal).toISOString() !== new Date(newVal).toISOString();
+        } else if (key === 'requiredSkills') {
+          const oldArr = Array.isArray(oldVal) ? oldVal : [];
+          const newArr = Array.isArray(newVal) ? newVal : [];
+          isDiff = oldArr.join(',') !== newArr.join(',');
+        } else if (typeof oldVal === 'number' || typeof newVal === 'number') {
+          isDiff = Number(oldVal) !== Number(newVal);
+        } else {
+          isDiff = String(oldVal ?? '') !== String(newVal ?? '');
+        }
+
+        if (isDiff) {
+          const isMaterial = MATERIAL_FIELDS.includes(key);
+          if (isMaterial) hasMaterialChange = true;
+          changedFieldNames.push(key);
+          changes.push({
+            field: key,
+            oldValue: oldVal,
+            newValue: newVal,
+            isMaterial
+          });
+        }
+      }
+    }
+
+    // Record change history if any fields changed
+    if (changes.length > 0) {
+      await JobChangeHistory.create({
+        job: jobId,
+        actor: req.user._id,
+        actorRole: req.user.role === ROLES.ADMIN ? 'admin' : 'employer',
+        changedFields: changedFieldNames,
+        changes,
+        isMaterial: hasMaterialChange,
+        reason: req.body.reason ? String(req.body.reason).slice(0, 500) : ''
+      });
+    }
+
+    // Notify affected applicants if material changes occurred
+    if (hasMaterialChange) {
+      const affectedApplications = await Application.find({
+        job: jobId,
+        status: { $in: ['APPLIED', 'SHORTLISTED', 'OFFERED', 'ACCEPTED'] }
+      }).populate('worker', 'name email');
+
+      const friendlyNames = changedFieldNames.map((f) => {
+        if (f === 'grossPay') return 'compensation rate';
+        if (f === 'workDate') return 'shift date';
+        if (f === 'startTime' || f === 'endTime') return 'shift hours';
+        if (f === 'locationName') return 'location address';
+        if (f === 'openings') return 'available openings';
+        return f;
+      });
+      const distinctNames = Array.from(new Set(friendlyNames));
+      const reasonText = req.body.reason ? ` (Reason: "${req.body.reason}")` : '';
+
+      for (const app of affectedApplications) {
+        app.decisionHistory.push({
+          status: app.status,
+          note: `Material shift update: ${distinctNames.join(', ')}${reasonText}`,
+          changedBy: req.user._id,
+          timestamp: new Date()
+        });
+        await app.save();
+
+        await createNotification({
+          recipient: app.worker._id,
+          type: 'APPLICATION_STATUS',
+          title: `Shift Updated: ${job.title}`,
+          message: `The employer updated details for "${job.title}" (${distinctNames.join(', ')}). Please review the updated shift details and reconfirm your interest if needed.`,
+          link: `/jobs/${jobId}`,
+          relatedResource: { resourceType: 'Job', resourceId: jobId }
+        });
+      }
+    }
+
+    const updatedJob = await Job.findByIdAndUpdate(jobId, safeUpdates, { new: true, runValidators: true });
 
     res.status(200).json({
       success: true,
       message: 'Job updated successfully.',
-      job: updatedJob
+      job: updatedJob,
+      changesRecorded: changes.length
     });
   } catch (error) {
     next(error);
@@ -348,10 +649,18 @@ export const cancelJob = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Unauthorized.' });
     }
 
+    if (job.status === JOB_STATUSES.CANCELLED) {
+      return res.status(400).json({ success: false, message: 'Job posting is already cancelled.' });
+    }
+
+    if (job.status === JOB_STATUSES.COMPLETED) {
+      return res.status(400).json({ success: false, message: 'Cannot cancel an already completed job.' });
+    }
+
     job.status = JOB_STATUSES.CANCELLED;
     await job.save();
 
-    // Notify any active applicants
+    // 1. Notify and cancel all active applications
     const activeApplications = await Application.find({
       job: jobId,
       status: { $in: ['APPLIED', 'SHORTLISTED', 'OFFERED', 'ACCEPTED', 'HIRED'] }
@@ -362,7 +671,8 @@ export const cancelJob = async (req, res, next) => {
       app.decisionHistory.push({
         status: 'CANCELLED',
         note: `Job cancelled: ${reason}`,
-        changedBy: req.user._id
+        changedBy: req.user._id,
+        timestamp: new Date()
       });
       await app.save();
 
@@ -375,9 +685,46 @@ export const cancelJob = async (req, res, next) => {
       });
     }
 
+    // 2. Cascade cancellation to active assignments (CONFIRMED or IN_PROGRESS), preserving COMPLETED
+    const activeAssignments = await Assignment.find({
+      job: jobId,
+      status: { $in: [ASSIGNMENT_STATUSES.CONFIRMED, ASSIGNMENT_STATUSES.IN_PROGRESS] }
+    });
+
+    for (const assignment of activeAssignments) {
+      assignment.status = ASSIGNMENT_STATUSES.CANCELLED;
+      assignment.cancellationReason = String(reason || 'Job cancelled by employer').slice(0, 500);
+      assignment.cancelledBy = req.user._id;
+      await assignment.save();
+
+      await createNotification({
+        recipient: assignment.worker,
+        type: 'APPLICATION_STATUS',
+        title: `Shift Cancelled: ${job.title}`,
+        message: `Your shift assignment for "${job.title}" has been cancelled because the job was cancelled by the employer.`,
+        link: '/worker/assignments'
+      });
+    }
+
+    // 3. Cascade cancellation to unfulfilled payment obligations (DUE), preserving PAID or PROCESSING
+    await PaymentRecord.updateMany(
+      { job: jobId, status: PAYMENT_STATUSES.DUE },
+      {
+        $set: { status: PAYMENT_STATUSES.CANCELLED },
+        $push: {
+          history: {
+            status: PAYMENT_STATUSES.CANCELLED,
+            note: 'Job cancelled by employer before work performed.',
+            updatedBy: req.user._id,
+            timestamp: new Date()
+          }
+        }
+      }
+    );
+
     res.status(200).json({
       success: true,
-      message: 'Job cancelled and applicants notified.',
+      message: 'Job cancelled and active commitments safely updated.',
       job
     });
   } catch (error) {

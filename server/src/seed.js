@@ -25,6 +25,12 @@ import {
 } from './config/constants.js';
 
 export async function runSeed() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'FATAL SECURITY VIOLATION: Database seeding with hardcoded demo credentials and collection reset is strictly prohibited in production (NODE_ENV=production).'
+    );
+  }
+
   console.log('[Seed] Connecting to database...');
   await connectDB();
 
@@ -538,11 +544,7 @@ export async function runSeed() {
 
   console.log('[Seed] Demo data seeding completed successfully!');
   console.log('---------------------------------------------------------');
-  console.log('DEMO ACCOUNTS READY:');
-  console.log('Worker:   worker@workmatch.demo     / Password123!');
-  console.log('Worker 2: worker2@workmatch.demo    / Password123!');
-  console.log('Employer: employer@workmatch.demo   / Password123!');
-  console.log('Admin:    admin@workmatch.demo      / AdminPass123!');
+  console.log('[Seed] Demo accounts initialized for local/development use.');
   console.log('---------------------------------------------------------');
 }
 

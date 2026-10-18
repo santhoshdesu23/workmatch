@@ -1,22 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Briefcase,
-  MapPin,
-  Calendar,
-  Clock,
-  DollarSign,
-  Users,
   CheckCircle2,
   ArrowRight,
   ArrowLeft,
-  Sparkles,
-  ShieldCheck,
-  Building2,
   Navigation,
   Mail,
-  RefreshCw,
-  AlertCircle
+  RefreshCw
 } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -82,6 +72,7 @@ export const CreateJobPage: React.FC = () => {
   const [paymentTiming, setPaymentTiming] = useState('Same Day / Within 24 hours of completion');
   const [cancellationPolicy, setCancellationPolicy] = useState('Notice must be provided at least 12 hours prior to shift commencement');
   const [applicationDeadline, setApplicationDeadline] = useState('');
+  const [detailsConfirmed, setDetailsConfirmed] = useState(false);
 
   const categories = [
     'Event assistance',
@@ -131,8 +122,19 @@ export const CreateJobPage: React.FC = () => {
         toastError('Please select the scheduled shift date.');
         return false;
       }
+      const selectedDate = new Date(workDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (selectedDate < today) {
+        toastError('Work date cannot be in the past.');
+        return false;
+      }
       if (!startTime || !endTime) {
         toastError('Please select both start and end shift times.');
+        return false;
+      }
+      if (totalHours <= 0) {
+        toastError('Total hours must be greater than zero.');
         return false;
       }
     } else if (step === 3) {
@@ -151,6 +153,9 @@ export const CreateJobPage: React.FC = () => {
       }
       if (!applicationDeadline) {
         setApplicationDeadline(workDate);
+      } else if (new Date(applicationDeadline) > new Date(workDate)) {
+        toastError('Application deadline cannot be after the scheduled work date.');
+        return false;
       }
     }
     return true;
@@ -169,6 +174,11 @@ export const CreateJobPage: React.FC = () => {
   const handlePublish = async () => {
     if (user && !user.emailVerified) {
       toastError('Email verification is required before you can publish shifts. Please verify your email address.');
+      return;
+    }
+
+    if (!detailsConfirmed) {
+      toastError('Please check the confirmation box to confirm that the displayed shift details are accurate and binding.');
       return;
     }
 
@@ -199,6 +209,7 @@ export const CreateJobPage: React.FC = () => {
         paymentTiming,
         cancellationPolicy,
         applicationDeadline: applicationDeadline || workDate,
+        detailsConfirmed: true,
         status: 'OPEN'
       });
 
@@ -568,6 +579,28 @@ export const CreateJobPage: React.FC = () => {
               <div><strong>Payment Terms:</strong> {paymentMethod} ({paymentTiming})</div>
             </div>
 
+            {/* TrustTrack Explicit Confirmation Card */}
+            <div className="p-4 bg-emerald-50/80 rounded-2xl border border-emerald-200 text-xs text-slate-800 space-y-2 mt-4">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="confirm-details-accuracy"
+                  checked={detailsConfirmed}
+                  onChange={(e) => setDetailsConfirmed(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                />
+                <label htmlFor="confirm-details-accuracy" className="leading-relaxed cursor-pointer select-none">
+                  <span className="font-bold text-emerald-950 block mb-0.5">
+                    TrustTrack Employer Commitment & Accuracy Confirmation
+                  </span>
+                  I explicitly confirm that all shift timing, compensation rate, location, duties, and physical requirements stated above are accurate, guaranteed, and binding. I acknowledge that any material change will be recorded in public job history and applicants will be notified.
+                </label>
+              </div>
+              <p className="text-[11px] text-slate-500 pl-7">
+                * Note: Confirming shift details certifies commitment to this listing. Platform identity verification is evaluated separately.
+              </p>
+            </div>
+
             {user && !user.emailVerified && (
               <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-2.5 mt-4">
                 <div className="flex items-center gap-2 font-bold text-sm text-amber-950">
@@ -619,12 +652,16 @@ export const CreateJobPage: React.FC = () => {
           <Button
             type="button"
             size="sm"
-            disabled={Boolean(user && !user.emailVerified)}
+            disabled={Boolean(user && !user.emailVerified) || !detailsConfirmed}
             isLoading={isSubmitting}
             onClick={handlePublish}
             leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
           >
-            {user && !user.emailVerified ? 'Email Verification Required to Publish' : 'Publish Shift to Marketplace'}
+            {user && !user.emailVerified
+              ? 'Email Verification Required to Publish'
+              : !detailsConfirmed
+              ? 'Confirm Shift Details to Publish'
+              : 'Publish Shift to Marketplace'}
           </Button>
         )}
       </div>

@@ -27,7 +27,12 @@ const reportSchema = new mongoose.Schema(
         'misleading_job',
         'unsafe_conditions',
         'no_show',
-        'other'
+        'other',
+        'pay_mismatch',
+        'schedule_mismatch',
+        'location_mismatch',
+        'duties_mismatch',
+        'unexpected_cancellation'
       ],
       required: true
     },
@@ -36,10 +41,20 @@ const reportSchema = new mongoose.Schema(
       required: [true, 'Report description is required'],
       maxlength: 1500
     },
+    evidence: {
+      type: String,
+      default: '',
+      maxlength: 2000
+    },
     status: {
       type: String,
       enum: ['pending', 'investigating', 'resolved', 'dismissed'],
       default: 'pending',
+      index: true
+    },
+    substantiated: {
+      type: Boolean,
+      default: false,
       index: true
     },
     resolutionNotes: {
@@ -58,5 +73,8 @@ const reportSchema = new mongoose.Schema(
     timestamps: true
   }
 );
+
+reportSchema.index({ reporter: 1, reportedJob: 1, category: 1, status: 1 });
+reportSchema.index({ reportedUser: 1, substantiated: 1, status: 1 });
 
 export const Report = mongoose.model('Report', reportSchema);

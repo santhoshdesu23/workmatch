@@ -9,6 +9,21 @@ import { EmployerProfile } from '../models/EmployerProfile.js';
 import { WorkerProfile } from '../models/WorkerProfile.js';
 import { ROLES, JOB_STATUSES, ASSIGNMENT_STATUSES } from '../config/constants.js';
 
+const SENSITIVE_USER_FIELDS =
+  '-passwordHash -resetPasswordToken -resetPasswordExpires -emailVerificationToken -emailVerificationExpires -tokenVersion';
+
+export function toSafeUserDTO(user) {
+  if (!user) return null;
+  const obj = typeof user.toObject === 'function' ? user.toObject() : { ...user };
+  delete obj.passwordHash;
+  delete obj.resetPasswordToken;
+  delete obj.resetPasswordExpires;
+  delete obj.emailVerificationToken;
+  delete obj.emailVerificationExpires;
+  delete obj.tokenVersion;
+  return obj;
+}
+
 export const getAdminDashboard = async (req, res, next) => {
   try {
     const [
@@ -35,7 +50,7 @@ export const getAdminDashboard = async (req, res, next) => {
       Assignment.countDocuments({ status: ASSIGNMENT_STATUSES.COMPLETED }),
       Report.countDocuments({ status: 'pending' }),
       VerificationRequest.countDocuments({ status: 'pending' }),
-      User.find().select('-passwordHash').sort({ createdAt: -1 }).limit(8).lean(),
+      User.find().select(SENSITIVE_USER_FIELDS).sort({ createdAt: -1 }).limit(8).lean(),
       Report.find().populate('reporter', 'name email').sort({ createdAt: -1 }).limit(6).lean()
     ]);
 
@@ -79,7 +94,7 @@ export const getAdminUsers = async (req, res, next) => {
     }
 
     const users = await User.find(filter)
-      .select('-passwordHash')
+      .select(SENSITIVE_USER_FIELDS)
       .sort({ createdAt: -1 })
       .lean();
 
@@ -96,6 +111,14 @@ export const updateAdminUserStatus = async (req, res, next) => {
   try {
     const { userId } = req.params;
     const { status, reason = '' } = req.body;
+
+    const allowedStatuses = ['active', 'suspended', 'pending'];
+    if (!status || !allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status: "${status}". Allowed: ${allowedStatuses.join(', ')}`
+      });
+    }
 
     const user = await User.findById(userId);
     if (!user) {
@@ -117,7 +140,7 @@ export const updateAdminUserStatus = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: `User status changed to ${status}.`,
-      user
+      user: toSafeUserDTO(user)
     });
   } catch (error) {
     next(error);
@@ -161,22 +184,51 @@ export const getAdminReports = async (req, res, next) => {
 export const resolveAdminReport = async (req, res, next) => {
   try {
     const { reportId } = req.params;
-    const { status, resolutionNotes } = req.body;
+    const { status, resolutionNotes, substantiated } = req.body;
 
-    const report = await Report.findByIdAndUpdate(
-      reportId,
-      {
-        status,
-        resolutionNotes,
-        resolvedBy: req.user._id,
-        resolvedAt: new Date()
-      },
-      { new: true }
-    );
+    const report = await Report.findById(reportId);
+    if (!report) {
+      return res.status(404).json({ success: false, message: 'Report not found.' });
+    }
+
+    const previousStatus = report.status;
+    const previousSubstantiated = report.substantiated;
+
+    if (status) {
+      report.status = status;
+    }
+    if (substantiated !== undefined) {
+      report.substantiated = Boolean(substantiated);
+    } else if (status === 'resolved' && report.substantiated === undefined) {
+      report.substantiated = false;
+    }
+
+    if (resolutionNotes !== undefined) {
+      report.resolutionNotes = String(resolutionNotes);
+    }
+    report.resolvedBy = req.user._id;
+    report.resolvedAt = new Date();
+    await report.save();
+
+    await AuditLog.create({
+      actor: req.user._id,
+      action: 'RESOLVE_REPORT',
+      resourceType: 'Report',
+      resourceId: report._id,
+      metadata: {
+        previousStatus,
+        newStatus: report.status,
+        previousSubstantiated,
+        newSubstantiated: report.substantiated,
+        reportedUser: report.reportedUser,
+        reportedJob: report.reportedJob,
+        resolutionNotes: report.resolutionNotes
+      }
+    });
 
     res.status(200).json({
       success: true,
-      message: 'Report resolved.',
+      message: 'Report resolved and administrative audit trail recorded.',
       report
     });
   } catch (error) {

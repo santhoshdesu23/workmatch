@@ -86,8 +86,8 @@ if (process.env.NODE_ENV !== 'test') {
   );
 }
 
-// Global baseline API rate limiter
-app.use('/api', generalApiLimiter);
+// Global baseline API rate limiter applied to all endpoints (both /api and root routes)
+app.use(generalApiLimiter);
 
 // Mount API routes
 app.use('/api', routes);

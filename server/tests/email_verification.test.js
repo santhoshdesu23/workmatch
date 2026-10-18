@@ -304,6 +304,78 @@ describe('Mandatory Email Verification Test Suite', () => {
       expect(res.body.success).toBe(false);
       expect(res.body.message).toMatch(/invalid or has expired/i);
     });
+
+    it('GET /api/auth/verify-email is REJECTED (404) and cannot change account state', async () => {
+      const getTestEmail = `get.test.${Date.now()}@test.local`;
+      await request(app).post('/api/auth/register').send({
+        name: 'Get Reject Candidate',
+        email: getTestEmail,
+        password: 'Password123!',
+        role: 'worker'
+      });
+      const sentEmails = _testEmailMock.getSentEmails();
+      const emailObj = sentEmails.find((e) => e.to === getTestEmail);
+      const match = emailObj.verifyUrl.match(/token=([a-f0-9]+)/);
+      const token = match[1];
+
+      // Attempting GET request must not verify or succeed
+      const getRes = await request(app).get(`/api/auth/verify-email?token=${token}`);
+      expect(getRes.status).toBe(404);
+
+      // Verify DB record remains strictly unverified
+      const user = await User.findOne({ email: getTestEmail });
+      expect(user.emailVerified).toBe(false);
+      expect(user.emailVerificationToken).toBeDefined();
+    });
+
+    it('Concurrent requests cannot both consume the same verification token (atomic test)', async () => {
+      const concurrentEmail = `concurrent.${Date.now()}@test.local`;
+      await request(app).post('/api/auth/register').send({
+        name: 'Concurrency Candidate',
+        email: concurrentEmail,
+        password: 'Password123!',
+        role: 'worker'
+      });
+      const sentEmails = _testEmailMock.getSentEmails();
+      const emailObj = sentEmails.find((e) => e.to === concurrentEmail);
+      const match = emailObj.verifyUrl.match(/token=([a-f0-9]+)/);
+      const token = match[1];
+
+      // Launch 2 parallel requests with the same token simultaneously
+      const [res1, res2] = await Promise.all([
+        request(app).post('/api/auth/verify-email').send({ token }),
+        request(app).post('/api/auth/verify-email').send({ token })
+      ]);
+
+      const statuses = [res1.status, res2.status].sort();
+      // Exactly one succeeds (200) and the other fails (400)
+      expect(statuses).toEqual([200, 400]);
+
+      const user = await User.findOne({ email: concurrentEmail });
+      expect(user.emailVerified).toBe(true);
+      expect(user.emailVerificationToken).toBeUndefined();
+    });
+
+    it('POST /api/auth/verify-email is rate-limited: rejects excessive verification attempts with 429', async () => {
+      _resetVerificationRateLimiter();
+      _setTestVerificationLimit(2);
+
+      // 1. First attempt: OK (400 because invalid token, but not rate limited)
+      const r1 = await request(app).post('/api/auth/verify-email').send({ token: 'dummy1' });
+      expect(r1.status).toBe(400);
+
+      // 2. Second attempt: OK
+      const r2 = await request(app).post('/api/auth/verify-email').send({ token: 'dummy2' });
+      expect(r2.status).toBe(400);
+
+      // 3. Third attempt: Rate limited!
+      const r3 = await request(app).post('/api/auth/verify-email').send({ token: 'dummy3' });
+      expect(r3.status).toBe(429);
+      expect(r3.body.message).toMatch(/too many verification requests/i);
+
+      _setTestVerificationLimit(null);
+      _resetVerificationRateLimiter();
+    });
   });
 
   // =========================================================================

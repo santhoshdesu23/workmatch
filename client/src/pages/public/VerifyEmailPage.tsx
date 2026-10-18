@@ -13,7 +13,23 @@ export const VerifyEmailPage: React.FC = () => {
   const { user, refreshUser } = useAuth();
   const { success: toastSuccess, error: toastError } = useToast();
 
-  const tokenFromUrl = searchParams.get('token') || '';
+  // Capture token on initial mount and immediately scrub the token parameter from the address bar & history
+  const [tokenToVerify] = useState<string>(() => {
+    const raw = searchParams.get('token') || '';
+    if (raw && typeof window !== 'undefined' && window.history?.replaceState) {
+      try {
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.delete('token');
+        const remainingQuery = currentUrl.searchParams.toString();
+        const cleanUrl = currentUrl.pathname + (remainingQuery ? `?${remainingQuery}` : '') + currentUrl.hash;
+        window.history.replaceState({}, document.title, cleanUrl);
+      } catch (err) {
+        // Fallback: preserve path without query
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+    return raw;
+  });
 
   const [verifying, setVerifying] = useState<boolean>(false);
   const [isVerified, setIsVerified] = useState<boolean>(false);
@@ -24,22 +40,44 @@ export const VerifyEmailPage: React.FC = () => {
   const [isResending, setIsResending] = useState<boolean>(false);
   const [resendSuccess, setResendSuccess] = useState<boolean>(false);
 
+  // Enforce no-referrer policy while on the verification page
+  useEffect(() => {
+    let meta = document.querySelector('meta[name="referrer"]') as HTMLMetaElement | null;
+    const previousPolicy = meta ? meta.content : null;
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'referrer';
+      document.head.appendChild(meta);
+    }
+    meta.content = 'no-referrer';
+
+    return () => {
+      if (meta) {
+        if (previousPolicy) {
+          meta.content = previousPolicy;
+        } else {
+          meta.remove();
+        }
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (user?.email && !resendEmail) {
       setResendEmail(user.email);
     }
   }, [user]);
 
-  // If token is present in the URL, verify automatically on load
+  // If token was present in the URL, verify automatically on load via POST
   useEffect(() => {
-    if (!tokenFromUrl) return;
+    if (!tokenToVerify) return;
 
     let isMounted = true;
     const executeVerification = async () => {
       setVerifying(true);
       setErrorMessage('');
       try {
-        const res = await api.post('/auth/verify-email', { token: tokenFromUrl });
+        const res = await api.post('/auth/verify-email', { token: tokenToVerify });
         if (!isMounted) return;
 
         if (res.data?.success) {
@@ -68,7 +106,7 @@ export const VerifyEmailPage: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [tokenFromUrl]);
+  }, [tokenToVerify]);
 
   const handleResend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,7 +206,7 @@ export const VerifyEmailPage: React.FC = () => {
               </div>
             )}
 
-            {!tokenFromUrl && !errorMessage && (
+            {!tokenToVerify && !errorMessage && (
               <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-start gap-2.5">
                 <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
