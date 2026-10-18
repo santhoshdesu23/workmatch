@@ -13,6 +13,8 @@
     "build:server": "npm --prefix server install",
     "start": "npm --prefix server run start",
     "seed": "npm --prefix server run seed",
+    "seed:local": "npm --prefix server run seed:local",
+    "cleanup:nyc": "npm --prefix server run cleanup:nyc",
     "test": "npm --prefix server run test"
   },
   "keywords": [

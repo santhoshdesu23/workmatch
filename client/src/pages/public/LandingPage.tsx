@@ -69,8 +69,8 @@ export const LandingPage: React.FC = () => {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const params = new URLSearchParams();
-    const combinedSearch = [searchQuery.trim(), locationQuery.trim()].filter(Boolean).join(' ');
-    if (combinedSearch) params.append('search', combinedSearch);
+    if (searchQuery.trim()) params.append('search', searchQuery.trim());
+    if (locationQuery.trim()) params.append('location', locationQuery.trim());
     if (selectedCategory) params.append('category', selectedCategory);
     if (workDate) params.append('workDate', workDate);
     navigate(`/jobs?${params.toString()}`);
@@ -242,7 +242,7 @@ export const LandingPage: React.FC = () => {
                     type="text"
                     value={locationQuery}
                     onChange={(e) => setLocationQuery(e.target.value)}
-                    placeholder="City or venue"
+                    placeholder="e.g. Atigre, Kolhapur, Shiroli"
                     className="w-full text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none"
                   />
                 </div>
@@ -385,6 +385,11 @@ export const LandingPage: React.FC = () => {
                         <Badge variant="emerald" size="sm">
                           {job.category}
                         </Badge>
+                        {job.isDemo && (
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                            DEMO
+                          </span>
+                        )}
                         {job.detailsConfirmed && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
@@ -396,7 +401,7 @@ export const LandingPage: React.FC = () => {
                       {/* Pay Badge */}
                       <div className="text-right">
                         <span className="text-lg font-black text-slate-900">
-                          ${job.grossPay}
+                          {job.currency === 'INR' ? '₹' : '$'}{job.grossPay}
                         </span>
                         <span className="text-xs font-medium text-slate-500"> / {job.payBasis}</span>
                       </div>
@@ -432,7 +437,14 @@ export const LandingPage: React.FC = () => {
                       </div>
                       <div className="flex items-center gap-1.5 col-span-2 truncate">
                         <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span className="truncate">{job.locationName}</span>
+                        <span className="truncate">
+                          {job.locality ? `${job.locality}, ${job.district || job.city || ''} (${job.locationName})` : job.locationName}
+                        </span>
+                        {job.distanceKm !== null && job.distanceKm !== undefined && (
+                          <span className="text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 text-[10px] shrink-0">
+                            ~{job.distanceKm} km
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -459,7 +471,7 @@ export const LandingPage: React.FC = () => {
                   {/* Card Footer: Spots & CTA */}
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
                     <span className="text-slate-500 font-medium">
-                      Est. Total: <strong className="text-slate-800">${estimatedTotal}</strong> • {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left
+                      Est. Total: <strong className="text-slate-800">{job.currency === 'INR' ? '₹' : '$'}{estimatedTotal}</strong> • {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left
                     </span>
                     <Button
                       size="sm"

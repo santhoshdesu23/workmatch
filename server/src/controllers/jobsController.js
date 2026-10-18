@@ -40,6 +40,11 @@ export const getJobs = async (req, res, next) => {
       lat,
       lng,
       maxDistanceKm,
+      locality,
+      city,
+      district,
+      state,
+      location,
       sort = 'recent',
       page = 1,
       limit = 20
@@ -52,12 +57,47 @@ export const getJobs = async (req, res, next) => {
         { title: { $regex: search, $options: 'i' } },
         { description: { $regex: search, $options: 'i' } },
         { requiredSkills: { $regex: search, $options: 'i' } },
-        { locationName: { $regex: search, $options: 'i' } }
+        { locationName: { $regex: search, $options: 'i' } },
+        { locality: { $regex: search, $options: 'i' } },
+        { city: { $regex: search, $options: 'i' } },
+        { district: { $regex: search, $options: 'i' } }
       ];
     }
 
     if (category) {
       query.category = category;
+    }
+
+    if (locality) {
+      query.locality = { $regex: `^${locality.trim()}$`, $options: 'i' };
+    }
+
+    if (city) {
+      query.city = { $regex: `^${city.trim()}$`, $options: 'i' };
+    }
+
+    if (district) {
+      query.district = { $regex: `^${district.trim()}$`, $options: 'i' };
+    }
+
+    if (state) {
+      query.state = { $regex: `^${state.trim()}$`, $options: 'i' };
+    }
+
+    if (location && !locality && !city && !district) {
+      const locTerm = location.trim();
+      const locOr = [
+        { locality: { $regex: locTerm, $options: 'i' } },
+        { city: { $regex: locTerm, $options: 'i' } },
+        { district: { $regex: locTerm, $options: 'i' } },
+        { locationName: { $regex: locTerm, $options: 'i' } }
+      ];
+      if (query.$or) {
+        query.$and = [{ $or: query.$or }, { $or: locOr }];
+        delete query.$or;
+      } else {
+        query.$or = locOr;
+      }
     }
 
     if (minPay || maxPay) {
@@ -92,19 +132,60 @@ export const getJobs = async (req, res, next) => {
     const empProfileMap = new Map();
     employerProfiles.forEach((p) => empProfileMap.set(p.user.toString(), p));
 
-    const originLat = lat ? Number(lat) : workerProfile?.location?.coordinates?.[1];
-    const originLng = lng ? Number(lng) : workerProfile?.location?.coordinates?.[0];
+    // Reliable origin coordinates parsing
+    let originLat = null;
+    let originLng = null;
+
+    if (lat !== undefined && lat !== '' && !isNaN(Number(lat))) {
+      originLat = Number(lat);
+    } else if (
+      workerProfile?.location?.coordinates &&
+      Array.isArray(workerProfile.location.coordinates) &&
+      workerProfile.location.coordinates.length >= 2 &&
+      !isNaN(Number(workerProfile.location.coordinates[1])) &&
+      !(workerProfile.location.coordinates[0] === 0 && workerProfile.location.coordinates[1] === 0)
+    ) {
+      originLat = Number(workerProfile.location.coordinates[1]);
+    }
+
+    if (lng !== undefined && lng !== '' && !isNaN(Number(lng))) {
+      originLng = Number(lng);
+    } else if (
+      workerProfile?.location?.coordinates &&
+      Array.isArray(workerProfile.location.coordinates) &&
+      workerProfile.location.coordinates.length >= 2 &&
+      !isNaN(Number(workerProfile.location.coordinates[0])) &&
+      !(workerProfile.location.coordinates[0] === 0 && workerProfile.location.coordinates[1] === 0)
+    ) {
+      originLng = Number(workerProfile.location.coordinates[0]);
+    }
 
     // Compute distance and match scores
     jobs = jobs.map((job) => {
       const empProf = empProfileMap.get(job.employer?._id?.toString());
       let distanceKm = null;
-      if (originLat && originLng && job.location?.coordinates?.[1] && job.location?.coordinates?.[0]) {
+
+      const hasJobCoords =
+        job.location?.coordinates &&
+        Array.isArray(job.location.coordinates) &&
+        job.location.coordinates.length >= 2 &&
+        job.location.coordinates[0] != null &&
+        job.location.coordinates[1] != null &&
+        !isNaN(Number(job.location.coordinates[0])) &&
+        !isNaN(Number(job.location.coordinates[1])) &&
+        !(Number(job.location.coordinates[0]) === 0 && Number(job.location.coordinates[1]) === 0);
+
+      const hasOriginCoords =
+        originLat !== null &&
+        originLng !== null &&
+        !(originLat === 0 && originLng === 0);
+
+      if (hasOriginCoords && hasJobCoords) {
         distanceKm = calculateDistanceKm(
           originLat,
           originLng,
-          job.location.coordinates[1],
-          job.location.coordinates[0]
+          Number(job.location.coordinates[1]),
+          Number(job.location.coordinates[0])
         );
       }
 
@@ -127,10 +208,13 @@ export const getJobs = async (req, res, next) => {
       };
     });
 
-    // Distance filter if requested
+    // Distance radius filter: Only retain jobs with reliable distance within maxDistanceKm
     if (maxDistanceKm) {
       const maxDist = Number(maxDistanceKm);
-      jobs = jobs.filter((j) => j.distanceKm === null || j.distanceKm <= maxDist);
+      if (!isNaN(maxDist) && maxDist > 0) {
+        // Distant jobs and jobs with missing coordinates (cannot be proven nearby) are excluded
+        jobs = jobs.filter((j) => j.distanceKm !== null && j.distanceKm <= maxDist);
+      }
     }
 
     // Sorting
@@ -138,6 +222,7 @@ export const getJobs = async (req, res, next) => {
       jobs.sort((a, b) => b.grossPay - a.grossPay);
     } else if (sort === 'nearest') {
       jobs.sort((a, b) => {
+        if (a.distanceKm === null && b.distanceKm === null) return 0;
         if (a.distanceKm === null) return 1;
         if (b.distanceKm === null) return -1;
         return a.distanceKm - b.distanceKm;
@@ -159,6 +244,7 @@ export const getJobs = async (req, res, next) => {
     res.status(200).json({
       success: true,
       jobs: paginated,
+      total,
       pagination: {
         total,
         page: pageNum,

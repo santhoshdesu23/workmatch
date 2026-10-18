@@ -235,6 +235,11 @@ export const WorkerDashboardPage: React.FC = () => {
                     <div className="space-y-1.5 flex-1">
                       <div className="flex items-center gap-2">
                         <Badge variant="emerald" size="sm">{job.category}</Badge>
+                        {job.isDemo && (
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                            DEMO
+                          </span>
+                        )}
                         {job.matchData && (
                           <Badge variant="emerald" size="sm">
                             <Sparkles className="w-3 h-3" />
@@ -256,7 +261,10 @@ export const WorkerDashboardPage: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-1">
                           <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{job.locationName}</span>
+                          <span>{job.locality ? `${job.locality}, ${job.district || job.city || ''}` : job.locationName}</span>
+                          {job.distanceKm !== null && job.distanceKm !== undefined && (
+                            <span className="text-emerald-600 font-semibold">(~{job.distanceKm} km)</span>
+                          )}
                         </div>
                         <div className="flex items-center gap-1">
                           <Calendar className="w-3.5 h-3.5 text-slate-400" />
@@ -267,7 +275,7 @@ export const WorkerDashboardPage: React.FC = () => {
 
                     <div className="text-right shrink-0">
                       <div className="text-base font-extrabold text-slate-900">
-                        ${job.grossPay} <span className="text-xs font-normal text-slate-500">/{job.payBasis}</span>
+                        {job.currency === 'INR' ? '₹' : '$'}{job.grossPay} <span className="text-xs font-normal text-slate-500">/{job.payBasis}</span>
                       </div>
                       <Link to={`/jobs/${job._id}`} className="inline-block mt-2">
                         <Button size="sm">View Shift</Button>

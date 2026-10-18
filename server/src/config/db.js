@@ -26,6 +26,10 @@ export function formatMongoUri(rawUri) {
 }
 
 export const connectDB = async () => {
+  if (mongoose.connection.readyState === 1) {
+    return;
+  }
+
   const isProduction = process.env.NODE_ENV === 'production';
   const rawUri = process.env.MONGODB_URI;
   const uri = formatMongoUri(rawUri);

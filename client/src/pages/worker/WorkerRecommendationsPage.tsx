@@ -144,6 +144,11 @@ export const WorkerRecommendationsPage: React.FC = () => {
                 <div className="space-y-2 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="emerald">{job.category}</Badge>
+                    {job.isDemo && (
+                      <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                        DEMO
+                      </span>
+                    )}
                     {job.matchData && (
                       <Badge
                         variant={job.matchData.matchScore >= 80 ? 'emerald' : 'amber'}
@@ -175,9 +180,11 @@ export const WorkerRecommendationsPage: React.FC = () => {
                   <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 pt-1">
                     <div className="flex items-center gap-1.5">
                       <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{job.locationName}</span>
-                      {job.distanceKm !== null && (
-                        <span className="text-emerald-700 font-semibold">(~{job.distanceKm} km away)</span>
+                      <span>{job.locality ? `${job.locality}, ${job.district || job.city || ''}` : job.locationName}</span>
+                      {job.distanceKm !== null && job.distanceKm !== undefined && (
+                        <span className="text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                          ~{job.distanceKm} km away
+                        </span>
                       )}
                     </div>
 
@@ -197,7 +204,7 @@ export const WorkerRecommendationsPage: React.FC = () => {
                 <div className="sm:text-right shrink-0 flex flex-col justify-between sm:items-end gap-3 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-100 w-full sm:w-auto">
                   <div>
                     <div className="text-2xl font-black text-slate-900">
-                      ${job.grossPay}
+                      {job.currency === 'INR' ? '₹' : '$'}{job.grossPay}
                       <span className="text-xs font-normal text-slate-500"> / {job.payBasis}</span>
                     </div>
                     <span className="text-[11px] text-slate-400">

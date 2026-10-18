@@ -159,16 +159,23 @@ export function evaluateLocationScore(workerLocation, jobLocation, travelRadiusK
     // Linear scaling within travel radius from 1.0 down to 0.7
     const score = Math.max(0.7, 1.0 - (0.3 * distance) / radius);
     return {
-      score,
+      score: Math.round(score * 100) / 100,
       distanceKm: distance,
       explanation: `Located ~${distance} km away, comfortably within your ${radius} km travel radius.`
     };
   } else {
-    // Outside travel radius: degraded score
+    // If distance is far outside acceptable travel radius (> 3x radius or > 100 km), score drops to 0
+    if (distance > Math.max(100, radius * 3)) {
+      return {
+        score: 0.0,
+        distanceKm: distance,
+        explanation: `Located ~${distance} km away, far outside your ${radius} km travel radius (different region/overseas).`
+      };
+    }
     const excess = distance - radius;
-    const score = Math.max(0.1, 0.7 - (0.6 * excess) / radius);
+    const score = Math.max(0.0, 0.65 - (0.65 * excess) / (radius * 2));
     return {
-      score,
+      score: Math.round(score * 100) / 100,
       distanceKm: distance,
       explanation: `Located ~${distance} km away, exceeding your preferred ${radius} km radius.`
     };

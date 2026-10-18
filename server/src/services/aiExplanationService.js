@@ -166,14 +166,24 @@ Return ONLY a valid JSON object with keys:
     else if (lower.includes('data entry') || lower.includes('office')) category = 'Data entry and office assistance';
 
     let minPay = null;
-    const payMatch = lower.match(/\$?(\d+)\s*(\/hr|per hour|hourly|\$)/);
-    if (payMatch) {
-      minPay = parseInt(payMatch[1], 10);
+    const payMatch = lower.match(/(?:\$|₹|rs\.?|inr)?\s*(\d+)\s*(?:\/hr|per hour|hourly|\/shift|per shift|shift|\$|₹)?/);
+    if (payMatch && payMatch[1]) {
+      const val = parseInt(payMatch[1], 10);
+      if (val > 0) minPay = val;
     }
+
+    let locality = null;
+    if (lower.includes('atigre')) locality = 'Atigre';
+    else if (lower.includes('shiroli')) locality = 'Shiroli MIDC';
+    else if (lower.includes('ichalkaranji')) locality = 'Ichalkaranji';
+    else if (lower.includes('hatkanangale')) locality = 'Hatkanangale';
+    else if (lower.includes('jaysingpur') || lower.includes('jaisingpur')) locality = 'Jaysingpur';
+    else if (lower.includes('kolhapur')) locality = 'Kolhapur';
 
     return {
       keyword: query,
       category,
+      locality,
       maxDistanceKm: lower.includes('near') ? 15 : null,
       minPay,
       source: 'local-rule-parser'

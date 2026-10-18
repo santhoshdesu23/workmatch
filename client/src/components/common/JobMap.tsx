@@ -23,9 +23,24 @@ export const JobMap: React.FC<JobMapProps> = ({
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    // Center coordinates: user location or Midtown NYC default
-    const centerLat = userLocation ? userLocation[0] : 40.7484;
-    const centerLng = userLocation ? userLocation[1] : -73.9857;
+    // Center coordinates: user location, or first job with valid coordinates, or Atigre/Kolhapur default [16.7410, 74.3720]
+    let centerLat = 16.7410;
+    let centerLng = 74.3720;
+
+    if (userLocation && userLocation[0] !== 0 && userLocation[1] !== 0) {
+      centerLat = userLocation[0];
+      centerLng = userLocation[1];
+    } else {
+      const firstValidJob = jobs.find(
+        (j) =>
+          j.location?.coordinates &&
+          (j.location.coordinates[0] !== 0 || j.location.coordinates[1] !== 0)
+      );
+      if (firstValidJob?.location?.coordinates) {
+        centerLat = firstValidJob.location.coordinates[1];
+        centerLng = firstValidJob.location.coordinates[0];
+      }
+    }
 
     if (!mapInstanceRef.current) {
       const map = L.map(mapContainerRef.current).setView([centerLat, centerLng], zoom);
@@ -79,10 +94,13 @@ export const JobMap: React.FC<JobMapProps> = ({
         const [lng, lat] = job.location.coordinates;
         const marker = L.marker([lat, lng], { icon: jobIcon }).addTo(map);
 
+        const currSym = job.currency === 'INR' ? '₹' : '$';
+        const demoTag = job.isDemo ? '<span style="background: #f1f5f9; color: #475569; font-size: 10px; padding: 1px 5px; border-radius: 4px; font-weight: 600; border: 1px solid #cbd5e1; margin-left: 4px;">DEMO</span>' : '';
+
         const popupContent = `
           <div style="min-width: 180px; font-family: sans-serif;">
-            <div style="font-size: 12px; font-weight: 700; color: #0f172a; margin-bottom: 2px;">${job.title}</div>
-            <div style="font-size: 11px; color: #059669; font-weight: 600; margin-bottom: 4px;">$${job.grossPay} / ${job.payBasis}</div>
+            <div style="font-size: 12px; font-weight: 700; color: #0f172a; margin-bottom: 2px;">${job.title} ${demoTag}</div>
+            <div style="font-size: 11px; color: #059669; font-weight: 600; margin-bottom: 4px;">${currSym}${job.grossPay} / ${job.payBasis}</div>
             <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">${job.locationName}</div>
             <a href="/jobs/${job._id}" style="display: inline-block; font-size: 11px; color: #059669; font-weight: 600; text-decoration: underline;">View Details &rarr;</a>
           </div>

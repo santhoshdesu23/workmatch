@@ -93,6 +93,13 @@ export interface Job {
   openings: number;
   filledCount: number;
   locationName: string;
+  locality?: string;
+  city?: string;
+  district?: string;
+  state?: string;
+  country?: string;
+  isDemo?: boolean;
+  seedId?: string;
   location: {
     type: 'Point';
     coordinates: [number, number];

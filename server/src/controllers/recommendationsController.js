@@ -38,7 +38,7 @@ export const getJobRecommendations = async (req, res, next) => {
     }
 
     // Case B: Worker has skills
-    const { limit = 20, minScore = 40 } = req.query;
+    const { limit = 20, minScore = 40, maxDistanceKm } = req.query;
 
     const openJobs = await Job.find({ status: JOB_STATUSES.OPEN })
       .populate('employer', 'name email verificationStatus')
@@ -66,7 +66,19 @@ export const getJobRecommendations = async (req, res, next) => {
       };
     });
 
-    // Case B & Case C: Exclude jobs with unrelated skills and jobs below threshold
+    // Distance boundary check:
+    // If worker has coordinates, exclude shifts that are excessively distant from their travel radius
+    const workerHasCoords =
+      workerProfile.location?.coordinates &&
+      Array.isArray(workerProfile.location.coordinates) &&
+      workerProfile.location.coordinates.length >= 2 &&
+      !(workerProfile.location.coordinates[0] === 0 && workerProfile.location.coordinates[1] === 0);
+
+    const maxAllowedDist = maxDistanceKm
+      ? Number(maxDistanceKm)
+      : (workerProfile.travelRadiusKm ? Math.max(50, Number(workerProfile.travelRadiusKm) * 2) : 50);
+
+    // Case B & Case C: Exclude jobs with unrelated skills, excessive distance, and jobs below threshold
     // If a job specifies required skills, worker MUST match at least one required skill
     const filteredJobs = scoredJobs
       .filter((j) => {
@@ -74,6 +86,12 @@ export const getJobRecommendations = async (req, res, next) => {
         if (jobReqSkills.length > 0 && (!j.matchData.matchedSkills || j.matchData.matchedSkills.length === 0)) {
           return false;
         }
+
+        // Location distance boundary: exclude jobs exceeding travel radius / boundary
+        if (workerHasCoords && j.matchData.distanceKm !== null && j.matchData.distanceKm > maxAllowedDist) {
+          return false;
+        }
+
         return j.matchData.matchScore >= Number(minScore);
       })
       .sort((a, b) => b.matchData.matchScore - a.matchData.matchScore)

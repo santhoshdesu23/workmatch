@@ -46,6 +46,33 @@ const jobSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Location address or description is required']
     },
+    locality: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    city: {
+      type: String,
+      trim: true,
+      default: '',
+      index: true
+    },
+    district: {
+      type: String,
+      trim: true,
+      default: '',
+      index: true
+    },
+    state: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    country: {
+      type: String,
+      trim: true,
+      default: 'India'
+    },
     location: {
       type: {
         type: String,
@@ -57,6 +84,16 @@ const jobSchema = new mongoose.Schema(
         required: true,
         default: [0, 0]
       }
+    },
+    isDemo: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    seedId: {
+      type: String,
+      index: true,
+      sparse: true
     },
     workDate: {
       type: Date,
@@ -163,5 +200,6 @@ const jobSchema = new mongoose.Schema(
 
 jobSchema.index({ location: '2dsphere' });
 jobSchema.index({ status: 1, workDate: 1, category: 1 });
+jobSchema.index({ city: 1, district: 1 });
 
 export const Job = mongoose.model('Job', jobSchema);

@@ -36,6 +36,17 @@ export const JobDiscoveryPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
 
+  // Location & Presets
+  const LOCALITY_PRESETS = [
+    { label: 'All Locations / Any Distance', locality: '', coords: null },
+    { label: 'Atigre (Center)', locality: 'Atigre', coords: [16.7410, 74.3720] as [number, number] },
+    { label: 'Hatkanangale', locality: 'Hatkanangale', coords: [16.7445, 74.4442] as [number, number] },
+    { label: 'Shiroli MIDC', locality: 'Shiroli MIDC', coords: [16.7482, 74.3015] as [number, number] },
+    { label: 'Ichalkaranji', locality: 'Ichalkaranji', coords: [16.6960, 74.4620] as [number, number] },
+    { label: 'Jaysingpur', locality: 'Jaysingpur', coords: [16.7820, 74.5580] as [number, number] },
+    { label: 'Kolhapur City', locality: 'Kolhapur', coords: [16.7050, 74.2430] as [number, number] }
+  ];
+
   // Filter States
   const [search, setSearch] = useState<string>(searchParams.get('search') || '');
   const [category, setCategory] = useState<string>(searchParams.get('category') || '');
@@ -43,6 +54,9 @@ export const JobDiscoveryPage: React.FC = () => {
   const [workDate, setWorkDate] = useState<string>(searchParams.get('workDate') || '');
   const [maxDistanceKm, setMaxDistanceKm] = useState<string>(searchParams.get('maxDistanceKm') || '');
   const [sort, setSort] = useState<string>(searchParams.get('sort') || 'recent');
+  const [selectedLocality, setSelectedLocality] = useState<string>(searchParams.get('locality') || '');
+  const [userCoords, setUserCoords] = useState<[number, number] | null>(null);
+  const [isLocating, setIsLocating] = useState<boolean>(false);
   const [nlQuery, setNlQuery] = useState<string>('');
   const [isNlSearching, setIsNlSearching] = useState<boolean>(false);
 
@@ -56,6 +70,11 @@ export const JobDiscoveryPage: React.FC = () => {
       if (workDate) params.append('workDate', workDate);
       if (maxDistanceKm) params.append('maxDistanceKm', maxDistanceKm);
       if (sort) params.append('sort', sort);
+      if (selectedLocality) params.append('locality', selectedLocality);
+      if (userCoords) {
+        params.append('lat', String(userCoords[0]));
+        params.append('lng', String(userCoords[1]));
+      }
 
       const res = await api.get(`/jobs?${params.toString()}`);
       if (res.data?.success) {
@@ -70,7 +89,7 @@ export const JobDiscoveryPage: React.FC = () => {
 
   useEffect(() => {
     fetchJobs();
-  }, [category, minPay, workDate, maxDistanceKm, sort]);
+  }, [category, minPay, workDate, maxDistanceKm, sort, selectedLocality, userCoords]);
 
   const handleManualSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,6 +109,11 @@ export const JobDiscoveryPage: React.FC = () => {
         if (parsed.category) setCategory(parsed.category);
         if (parsed.minPay) setMinPay(String(parsed.minPay));
         if (parsed.maxDistanceKm) setMaxDistanceKm(String(parsed.maxDistanceKm));
+        if (parsed.locality) {
+          setSelectedLocality(parsed.locality);
+          const found = LOCALITY_PRESETS.find(p => p.locality.toLowerCase() === parsed.locality.toLowerCase());
+          if (found?.coords) setUserCoords(found.coords);
+        }
         info(`Natural language query parsed via ${parsed.source || 'AI engine'}!`);
       }
     } catch (err: any) {
@@ -99,6 +123,26 @@ export const JobDiscoveryPage: React.FC = () => {
       setIsNlSearching(false);
       fetchJobs();
     }
+  };
+
+  const handleUseDeviceLocation = () => {
+    if (!navigator.geolocation) {
+      toastError('Geolocation is not supported by your browser.');
+      return;
+    }
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setIsLocating(false);
+        setUserCoords([pos.coords.latitude, pos.coords.longitude]);
+        setSelectedLocality('');
+        info(`Location detected: ${pos.coords.latitude.toFixed(3)}, ${pos.coords.longitude.toFixed(3)}`);
+      },
+      (err) => {
+        setIsLocating(false);
+        toastError(`Location permission denied or unavailable: ${err.message}`);
+      }
+    );
   };
 
   const handleToggleSave = async (jobId: string) => {
@@ -150,22 +194,20 @@ export const JobDiscoveryPage: React.FC = () => {
           <div className="bg-white border border-slate-200 rounded-xl p-1 flex items-center shadow-xs">
             <button
               onClick={() => setViewMode('list')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                viewMode === 'list'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${viewMode === 'list'
                   ? 'bg-slate-900 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
-              }`}
+                }`}
             >
               <List className="w-3.5 h-3.5" />
               List View
             </button>
             <button
               onClick={() => setViewMode('map')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                viewMode === 'map'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${viewMode === 'map'
                   ? 'bg-slate-900 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
-              }`}
+                }`}
             >
               <MapIcon className="w-3.5 h-3.5" />
               Map View
@@ -209,7 +251,7 @@ export const JobDiscoveryPage: React.FC = () => {
               <span className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                 <Filter className="w-3.5 h-3.5 text-slate-500" /> Filters
               </span>
-              {(search || category || minPay || workDate || maxDistanceKm) && (
+              {(search || category || minPay || workDate || maxDistanceKm || selectedLocality || userCoords) && (
                 <button
                   onClick={() => {
                     setSearch('');
@@ -217,11 +259,51 @@ export const JobDiscoveryPage: React.FC = () => {
                     setMinPay('');
                     setWorkDate('');
                     setMaxDistanceKm('');
+                    setSelectedLocality('');
+                    setUserCoords(null);
                   }}
                   className="text-[11px] text-emerald-600 font-semibold hover:underline cursor-pointer"
                 >
                   Reset All
                 </button>
+              )}
+            </div>
+
+            {/* Location Selector (Atigre, Kolhapur, etc.) */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-medium text-slate-700">Location / Area</label>
+                <button
+                  type="button"
+                  onClick={handleUseDeviceLocation}
+                  disabled={isLocating}
+                  className="text-[11px] text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1 cursor-pointer"
+                  title="Detect coordinates from browser GPS"
+                >
+                  <MapPin className="w-3 h-3" />
+                  {isLocating ? 'Locating...' : 'My GPS'}
+                </button>
+              </div>
+              <select
+                value={selectedLocality}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedLocality(val);
+                  const preset = LOCALITY_PRESETS.find((p) => p.locality === val);
+                  setUserCoords(preset?.coords || null);
+                }}
+                className="w-full text-xs px-3 py-2 border border-slate-200 rounded-xl focus:outline-none bg-white cursor-pointer"
+              >
+                {LOCALITY_PRESETS.map((p) => (
+                  <option key={p.label} value={p.locality}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+              {userCoords && (
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Active point: {userCoords[0].toFixed(3)}, {userCoords[1].toFixed(3)}
+                </p>
               )}
             </div>
 
@@ -285,7 +367,7 @@ export const JobDiscoveryPage: React.FC = () => {
 
             {/* Max Distance */}
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1.5">Travel Radius</label>
+              <label className="block text-xs font-medium text-slate-700 mb-1.5">Search Radius</label>
               <select
                 value={maxDistanceKm}
                 onChange={(e) => setMaxDistanceKm(e.target.value)}
@@ -293,6 +375,7 @@ export const JobDiscoveryPage: React.FC = () => {
               >
                 <option value="">Any Distance</option>
                 <option value="5">Within 5 km</option>
+                <option value="10">Within 10 km</option>
                 <option value="15">Within 15 km</option>
                 <option value="25">Within 25 km</option>
                 <option value="50">Within 50 km</option>
@@ -329,22 +412,18 @@ export const JobDiscoveryPage: React.FC = () => {
           ) : jobs.length === 0 ? (
             <EmptyState
               icon={Search}
-              title="No jobs matching your filters"
-              description="Try adjusting your keyword, expanding your travel radius, or selecting an open date."
-              actionText="Reset Filters"
+              title="No temporary jobs matching your current filters"
+              description="No open shifts found for the selected area and radius. Try expanding your search radius to 25 km or 50 km, or selecting another locality."
+              actionText="Expand Radius (50 km)"
               onAction={() => {
-                setSearch('');
-                setCategory('');
-                setMinPay('');
-                setWorkDate('');
-                setMaxDistanceKm('');
+                setMaxDistanceKm('50');
               }}
             />
           ) : viewMode === 'map' ? (
             <div className="space-y-4">
-              <JobMap jobs={jobs} className="h-[500px]" />
+              <JobMap jobs={jobs} userLocation={userCoords || undefined} className="h-[500px]" />
               <p className="text-xs text-slate-400 text-center">
-                Click on any map pin to view shift details and compensation.
+                Click on any map pin to view shift details, hourly/shift rate, and exact venue locality.
               </p>
             </div>
           ) : (
@@ -357,6 +436,11 @@ export const JobDiscoveryPage: React.FC = () => {
                         <Badge variant="emerald" size="sm">
                           {job.category}
                         </Badge>
+                        {job.isDemo && (
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                            DEMO
+                          </span>
+                        )}
                         {job.employerProfile?.verificationStatus === 'verified' && (
                           <Badge variant="blue" size="sm">
                             <ShieldCheck className="w-3 h-3 text-sky-600" />
@@ -394,9 +478,11 @@ export const JobDiscoveryPage: React.FC = () => {
 
                         <div className="flex items-center gap-1.5">
                           <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{job.locationName}</span>
-                          {job.distanceKm !== null && (
-                            <span className="text-emerald-600 font-semibold">(~{job.distanceKm} km)</span>
+                          <span>{job.locality ? `${job.locality}, ${job.district || job.city || ''}` : job.locationName}</span>
+                          {job.distanceKm !== null && job.distanceKm !== undefined && (
+                            <span className="text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                              ~{job.distanceKm} km away
+                            </span>
                           )}
                         </div>
 
@@ -427,7 +513,7 @@ export const JobDiscoveryPage: React.FC = () => {
                     <div className="sm:text-right shrink-0 flex flex-col justify-between sm:items-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                       <div>
                         <div className="text-lg font-extrabold text-slate-900">
-                          ${job.grossPay}
+                          {job.currency === 'INR' ? '₹' : '$'}{job.grossPay}
                           <span className="text-xs font-normal text-slate-500"> / {job.payBasis}</span>
                         </div>
                         <div className="text-[11px] text-slate-400 mt-0.5">
@@ -439,11 +525,10 @@ export const JobDiscoveryPage: React.FC = () => {
                         {user?.role === 'worker' && (
                           <button
                             onClick={() => handleToggleSave(job._id)}
-                            className={`p-2 rounded-xl border transition-colors cursor-pointer ${
-                              job.isSaved
+                            className={`p-2 rounded-xl border transition-colors cursor-pointer ${job.isSaved
                                 ? 'bg-amber-50 border-amber-200 text-amber-600'
                                 : 'border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50'
-                            }`}
+                              }`}
                             aria-label="Bookmark Job"
                           >
                             <Bookmark className={`w-4 h-4 ${job.isSaved ? 'fill-amber-500' : ''}`} />

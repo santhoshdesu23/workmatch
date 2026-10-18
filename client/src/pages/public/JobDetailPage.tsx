@@ -272,6 +272,12 @@ export const JobDetailPage: React.FC = () => {
                 </span>
               )}
 
+              {job.isDemo && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold tracking-wider uppercase bg-amber-50 text-amber-800 border border-amber-300 px-2.5 py-0.5 rounded-full">
+                  DEMO / SAMPLE SHIFT
+                </span>
+              )}
+
               {/* Distinction between Identity Verification and Listing Confirmation */}
               {job.employerProfile?.verificationStatus === 'verified' && (
                 <Badge variant="blue">
@@ -300,11 +306,11 @@ export const JobDetailPage: React.FC = () => {
           {/* Pay Display */}
           <div className="sm:text-right bg-slate-50 sm:bg-transparent p-4 sm:p-0 rounded-xl border sm:border-0 border-slate-100 w-full sm:w-auto">
             <div className="text-2xl sm:text-3xl font-black text-slate-900">
-              ${job.grossPay}
+              {job.currency === 'INR' ? '₹' : '$'}{job.grossPay}
               <span className="text-sm font-medium text-slate-500"> / {job.payBasis}</span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Estimated Total: ${(job.grossPay * job.totalHours).toFixed(2)} ({job.totalHours} hrs)
+              Estimated Total: {job.currency === 'INR' ? '₹' : '$'}{(job.grossPay * job.totalHours).toFixed(2)} ({job.totalHours} hrs)
             </p>
           </div>
         </div>
@@ -437,7 +443,7 @@ export const JobDetailPage: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           <div className="p-3 rounded-xl bg-white/80 border border-slate-100 shadow-xs">
             <span className="text-slate-400 block text-[11px] mb-0.5">Guaranteed Rate</span>
-            <span className="font-extrabold text-emerald-800">${job.grossPay} / {job.payBasis}</span>
+            <span className="font-extrabold text-emerald-800">{job.currency === 'INR' ? '₹' : '$'}{job.grossPay} / {job.payBasis}</span>
             <span className="block text-[10px] text-slate-400 mt-0.5">No hidden commission cuts</span>
           </div>
 
