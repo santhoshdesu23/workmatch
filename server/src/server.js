@@ -19,11 +19,15 @@ if (isProduction) {
   const missing = [];
   if (!process.env.MONGODB_URI) missing.push('MONGODB_URI');
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) missing.push('JWT_SECRET (min 32 chars)');
-  if ((process.env.EMAIL_PROVIDER || '').toLowerCase() !== 'resend') {
-    missing.push('EMAIL_PROVIDER=resend (mock email prohibited in production)');
+  const provider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
+  if (provider !== 'resend' && provider !== 'brevo') {
+    missing.push('EMAIL_PROVIDER must be "brevo" or "resend" (mock email prohibited in production)');
   }
-  if (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY.trim() === '') {
+  if (provider === 'resend' && (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY.trim() === '')) {
     missing.push('RESEND_API_KEY');
+  }
+  if (provider === 'brevo' && (!process.env.BREVO_API_KEY || process.env.BREVO_API_KEY.trim() === '')) {
+    missing.push('BREVO_API_KEY');
   }
   if (missing.length > 0) {
     console.error(`[Server Boot Failure] Missing critical production configuration: ${missing.join(', ')}`);

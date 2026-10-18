@@ -107,13 +107,18 @@ export const register = async (req, res, next) => {
       console.error(`[Auth] Verification email dispatch failed for user ${user._id}: ${emailResult.error}`);
     }
 
-    const canExposeDevVerificationToken = process.env.NODE_ENV !== 'production' && (process.env.EMAIL_PROVIDER || '').toLowerCase() !== 'resend';
+    const provider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
+    const isLiveEmailProvider = provider === 'resend' || provider === 'brevo';
+    const canExposeDevVerificationToken = process.env.NODE_ENV !== 'production' && !isLiveEmailProvider;
 
     const token = signToken({ id: user._id, role: user.role, tokenVersion: user.tokenVersion || 0 });
 
     res.status(201).json({
       success: true,
-      message: 'Account registered successfully. Please check your email to verify your account.',
+      message: emailResult.success
+        ? 'Account registered successfully. Verification email sent. Please check your inbox.'
+        : "Account registered successfully, but we couldn't send your verification email. Please use the resend verification option.",
+      emailSent: Boolean(emailResult.success),
       token,
       user: {
         id: user._id,
@@ -269,12 +274,15 @@ export const forgotPassword = async (req, res, next) => {
       }
     }
 
-    // Expose debug token only in mock/test mode; NEVER when Resend or production is active
-    const canExposeDevToken = process.env.NODE_ENV !== 'production' && (process.env.EMAIL_PROVIDER || '').toLowerCase() !== 'resend';
+    // Expose debug token only in mock/test mode; NEVER when Brevo, Resend, or production is active
+    const provider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
+    const isLiveEmailProvider = provider === 'resend' || provider === 'brevo';
+    const canExposeDevToken = process.env.NODE_ENV !== 'production' && !isLiveEmailProvider;
 
     res.status(200).json({
       success: true,
-      message: 'If an account exists with this email address, password recovery instructions have been sent.',
+      message: 'Password reset instructions have been requested. If an account exists with this email address, password recovery instructions have been sent. Check your inbox if the account is eligible.',
+      emailSent: deliverySuccess,
       ...(canExposeDevToken && resetToken ? { devResetToken: resetToken } : {})
     });
   } catch (error) {
@@ -453,11 +461,17 @@ export const resendVerification = async (req, res, next) => {
 
         if (!emailResult.success) {
           console.error(`[Auth] Resend verification email dispatch failed for user ${targetUser._id}: ${emailResult.error}`);
+          return res.status(502).json({
+            success: false,
+            message: "We couldn't send your verification email. Please try again."
+          });
         }
       }
     }
 
-    const canExposeDevVerificationToken = process.env.NODE_ENV !== 'production' && (process.env.EMAIL_PROVIDER || '').toLowerCase() !== 'resend';
+    const provider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
+    const isLiveEmailProvider = provider === 'resend' || provider === 'brevo';
+    const canExposeDevVerificationToken = process.env.NODE_ENV !== 'production' && !isLiveEmailProvider;
 
     // Generic response prevents account enumeration
     res.status(200).json({

@@ -44,9 +44,10 @@ This guide provides exhaustive documentation for deploying WorkMatch in producti
 | `MONGODB_URI` | **Yes** | — | Backend | MongoDB Atlas connection string with TLS/SSL, replica set, and write concern. Silent fallback to in-memory databases is prohibited in production. |
 | `JWT_SECRET` | **Yes** | 32 chars | Backend | Cryptographically random secret used with HMAC-SHA256. Boot will fail fast if shorter than 32 characters. |
 | `CLIENT_URL` | **Yes** | — | Backend | Public frontend domain (e.g. `https://workmatch.vercel.app`). Enforces strict CORS allowlist and generates password-reset URLs. |
-| `EMAIL_PROVIDER` | **Yes** | — | Backend | Must be set to `resend` in production. Boot will fail fast if set to `mock` or omitted in production. |
-| `RESEND_API_KEY` | **Yes** | — | Backend | Official Resend API key (`re_...`). Boot will fail fast if missing in production. |
-| `EMAIL_FROM` | **Yes** | — | Backend | Verified sender header (e.g. `WorkMatch Security <security@workmatch.app>`). |
+| `EMAIL_PROVIDER` | **Yes** | — | Backend | Must be set to `brevo` or `resend` in production. Boot will fail fast if set to `mock` or omitted in production. |
+| `BREVO_API_KEY` | Conditional | — | Backend | Official Brevo API key (required if `EMAIL_PROVIDER=brevo`). |
+| `RESEND_API_KEY` | Conditional | — | Backend | Official Resend API key (`re_...`, required if `EMAIL_PROVIDER=resend`). |
+| `EMAIL_FROM` | **Yes** | — | Backend | Verified sender header (e.g. `WorkMatch Security <your_verified_sender@example.com>`). Must match an approved sender in your Brevo or Resend account. |
 | `RATE_LIMIT_STORE` | Optional | — | Backend | `memory` (default) for single-instance, or `redis` for multi-instance horizontal scaling. |
 | `REDIS_URL` | Conditional | — | Backend | Redis connection string (required in production if `RATE_LIMIT_STORE=redis`). |
 | `GEMINI_API_KEY` | Optional | — | Backend | Google Gemini API Key. If absent, WorkMatch seamlessly falls back to the deterministic explainable rule engine. |
@@ -55,20 +56,25 @@ This guide provides exhaustive documentation for deploying WorkMatch in producti
 
 > **Security Rule:** Never commit `.env` files to git. Verify that `.env` is listed in [`.gitignore`](./.gitignore).
 
-### 2.1 Resend Email Configuration & Domain Verification
+### 2.1 Transactional Email Configuration (Brevo REST API or Resend SDK)
 
-WorkMatch uses the official Resend SDK for transactional emails (such as single-use password resets).
+WorkMatch supports Brevo (official HTTPS REST API, ideal for Render free tier which blocks SMTP) and Resend.
 
-- **Environment Variables Required in Render:**
+- **Option A: Brevo Configuration (Recommended on Render):**
+  - `EMAIL_PROVIDER=brevo`
+  - `BREVO_API_KEY=<your_brevo_api_key>`
+  - `EMAIL_FROM=WorkMatch Security <your_verified_sender@example.com>`
+  - `CLIENT_URL=https://<your-frontend>.vercel.app`
+
+- **Option B: Resend Configuration:**
   - `EMAIL_PROVIDER=resend`
   - `RESEND_API_KEY=re_...`
   - `EMAIL_FROM=WorkMatch Security <security@workmatch.app>`
   - `CLIENT_URL=https://<your-frontend>.vercel.app`
 
 > [!IMPORTANT]
-> **Domain Verification Requirement:**  
-> The sender `security@workmatch.app` can deliver production emails to external user inboxes only **after** the domain `workmatch.app` has been added to [Resend Domains](https://resend.com/domains) and its corresponding DNS records (DKIM, SPF, and MX) have been verified in your DNS provider.  
-> Prior to domain verification, Resend will only permit sending to the registered account owner's email address or via onboarding test addresses (e.g. `onboarding@resend.dev`).
+> **Sender Verification Requirement:**  
+> The sender email address specified in `EMAIL_FROM` must be verified in your Brevo (Senders & IP) or Resend (Domains) account before live transactional emails can be dispatched. In Brevo, personal email addresses (such as Gmail) can be verified directly without purchasing a domain.
 
 ---
 

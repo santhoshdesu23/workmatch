@@ -9,25 +9,56 @@ import { Resend } from 'resend';
 let mockEmailQueue = [];
 let mockFailureEnabled = false;
 let customResendClient = null;
+let customBrevoFetch = null;
+
+/**
+ * Parses sender name and email from an RFC-style from header or email string.
+ * Example: "WorkMatch Security <security@workmatch.app>" => { name: "WorkMatch Security", email: "security@workmatch.app" }
+ */
+export function parseEmailFrom(fromHeader) {
+  const defaultEmail = 'security@workmatch.app';
+  const defaultName = 'WorkMatch Security';
+  if (!fromHeader || typeof fromHeader !== 'string') {
+    return { name: defaultName, email: defaultEmail };
+  }
+  const trimmed = fromHeader.trim();
+  const match = trimmed.match(/^(?:(.*?)<)?([^<>]+)>?$/);
+  if (!match) {
+    return { name: defaultName, email: trimmed };
+  }
+  const name = match[1] ? match[1].trim().replace(/^["']|["']$/g, '') : defaultName;
+  const email = match[2] ? match[2].trim() : defaultEmail;
+  return { name: name || defaultName, email };
+}
 
 /**
  * Validates email configuration for production safety.
- * Must fail fast if production attempts to boot without valid Resend credentials.
+ * Must fail fast if production attempts to boot without valid credentials.
  */
 export function validateEmailConfig() {
   const isProduction = process.env.NODE_ENV === 'production';
   if (isProduction) {
     const provider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
-    if (provider !== 'resend') {
+    if (provider !== 'resend' && provider !== 'brevo') {
       throw new Error(
-        'FATAL CONFIGURATION ERROR: EMAIL_PROVIDER must be explicitly set to "resend" in production. Mock email fallback is prohibited.'
+        'FATAL CONFIGURATION ERROR: EMAIL_PROVIDER must be explicitly set to "resend" or "brevo" in production. Mock email fallback is prohibited.'
       );
     }
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey || apiKey.trim() === '') {
-      throw new Error(
-        'FATAL CONFIGURATION ERROR: RESEND_API_KEY environment variable is missing or empty in production.'
-      );
+    if (provider === 'resend') {
+      const apiKey = process.env.RESEND_API_KEY;
+      if (!apiKey || apiKey.trim() === '') {
+        throw new Error(
+          'FATAL CONFIGURATION ERROR: RESEND_API_KEY environment variable is missing or empty in production.'
+        );
+      }
+    }
+    if (provider === 'brevo') {
+      const apiKey = process.env.BREVO_API_KEY;
+      if (!apiKey || apiKey.trim() === '') {
+        throw new Error(
+          'FATAL CONFIGURATION ERROR: BREVO_API_KEY environment variable is missing or empty in production.'
+        );
+      }
     }
   }
 }
@@ -44,6 +75,78 @@ export function getResendClient() {
 }
 
 /**
+ * Dispatches a transactional email using the official Brevo HTTP REST API.
+ * 
+ * @param {Object} params
+ * @param {string} params.to - Recipient email address
+ * @param {string} params.senderName - Sender display name
+ * @param {string} params.senderEmail - Verified sender email address
+ * @param {string} params.subject - Email subject
+ * @param {string} params.htmlContent - Email HTML body
+ * @param {string} params.textContent - Email text fallback
+ * @param {string} [params.userName] - Recipient name
+ * @returns {Promise<{ success: boolean, messageId?: string, error?: string, statusCode?: number }>}
+ */
+export async function sendViaBrevo({ to, senderName, senderEmail, subject, htmlContent, textContent, userName }) {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey || apiKey.trim() === '') {
+    const errorMsg = 'Brevo dispatch failed: BREVO_API_KEY environment variable is missing.';
+    console.error(`[EmailService] ${errorMsg}`);
+    return { success: false, error: errorMsg };
+  }
+
+  const fetchFn = customBrevoFetch || globalThis.fetch;
+  if (!fetchFn) {
+    const errorMsg = 'Global fetch is not available in this environment.';
+    console.error(`[EmailService] ${errorMsg}`);
+    return { success: false, error: errorMsg };
+  }
+
+  try {
+    const res = await fetchFn('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': apiKey.trim(),
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        sender: {
+          name: senderName || 'WorkMatch Security',
+          email: senderEmail
+        },
+        to: [
+          {
+            email: to,
+            name: userName || to
+          }
+        ],
+        subject,
+        htmlContent,
+        textContent
+      })
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const errorMsg = data?.message || `Brevo API HTTP ${res.status}: ${res.statusText || 'Error'}`;
+      // Safe diagnostic logging: do not log apiKey or tokens
+      console.error(`[EmailService] Brevo API error (${res.status}):`, errorMsg);
+      return { success: false, error: errorMsg, statusCode: res.status };
+    }
+
+    return {
+      success: true,
+      messageId: data?.messageId || 'brevo-accepted'
+    };
+  } catch (err) {
+    console.error('[EmailService] Brevo network exception during dispatch:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
  * Configure mock email service behavior for tests
  */
 export const _testEmailMock = {
@@ -52,7 +155,9 @@ export const _testEmailMock = {
   setSimulateFailure: (shouldFail) => { mockFailureEnabled = shouldFail; },
   getLastEmail: () => mockEmailQueue[mockEmailQueue.length - 1] || null,
   setResendClient: (client) => { customResendClient = client; },
-  resetResendClient: () => { customResendClient = null; }
+  resetResendClient: () => { customResendClient = null; },
+  setBrevoFetch: (mockFetch) => { customBrevoFetch = mockFetch; },
+  resetBrevoFetch: () => { customBrevoFetch = null; }
 };
 
 /**
@@ -98,14 +203,28 @@ export async function sendPasswordResetEmail({ to, resetToken, userName = 'WorkM
   const emailProvider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
 
   // 1. Strict Production Guard: NEVER silently use mock email in production
-  if (isProduction && emailProvider !== 'resend') {
+  if (isProduction && emailProvider !== 'resend' && emailProvider !== 'brevo') {
     const errorMsg = 'Mock email provider is prohibited in production.';
     console.error(`[EmailService] Security violation: ${errorMsg}`);
     return { success: false, error: errorMsg };
   }
 
-  // 2. Mock Transport (Explicit mock mode or test/dev default when resend is not selected)
-  if (emailProvider === 'mock' || (isTest && emailProvider !== 'resend') || (!isProduction && !process.env.RESEND_API_KEY && !customResendClient)) {
+  // 2. Brevo HTTP REST API Dispatch
+  if (emailProvider === 'brevo') {
+    const { name: senderName, email: senderEmailParsed } = parseEmailFrom(process.env.EMAIL_FROM || senderEmail);
+    return await sendViaBrevo({
+      to,
+      senderName,
+      senderEmail: senderEmailParsed,
+      subject,
+      htmlContent,
+      textContent,
+      userName
+    });
+  }
+
+  // 3. Mock Transport (Explicit mock mode or test/dev default when live provider is not selected)
+  if (emailProvider === 'mock' || (isTest && emailProvider !== 'resend') || (!isProduction && emailProvider !== 'resend' && !process.env.RESEND_API_KEY && !customResendClient)) {
     if (mockFailureEnabled) {
       console.error('[EmailService] Simulated transport failure for test verification');
       return { success: false, error: 'Simulated email provider network failure' };
@@ -127,7 +246,7 @@ export async function sendPasswordResetEmail({ to, resetToken, userName = 'WorkM
     };
   }
 
-  // 3. Official Resend SDK Dispatch
+  // 4. Official Resend SDK Dispatch
   const resend = getResendClient();
   if (!resend) {
     const errorMsg = 'Resend client is uninitialized: RESEND_API_KEY is missing.';
@@ -204,14 +323,28 @@ export async function sendVerificationEmail({ to, verificationToken, userName = 
   const emailProvider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
 
   // 1. Strict Production Guard
-  if (isProduction && emailProvider !== 'resend') {
+  if (isProduction && emailProvider !== 'resend' && emailProvider !== 'brevo') {
     const errorMsg = 'Mock email provider is prohibited in production.';
     console.error(`[EmailService] Security violation: ${errorMsg}`);
     return { success: false, error: errorMsg };
   }
 
-  // 2. Mock Transport
-  if (emailProvider === 'mock' || (isTest && emailProvider !== 'resend') || (!isProduction && !process.env.RESEND_API_KEY && !customResendClient)) {
+  // 2. Brevo HTTP REST API Dispatch
+  if (emailProvider === 'brevo') {
+    const { name: senderName, email: senderEmailParsed } = parseEmailFrom(process.env.EMAIL_FROM || senderEmail);
+    return await sendViaBrevo({
+      to,
+      senderName,
+      senderEmail: senderEmailParsed,
+      subject,
+      htmlContent,
+      textContent,
+      userName
+    });
+  }
+
+  // 3. Mock Transport
+  if (emailProvider === 'mock' || (isTest && emailProvider !== 'resend') || (!isProduction && emailProvider !== 'resend' && !process.env.RESEND_API_KEY && !customResendClient)) {
     if (mockFailureEnabled) {
       console.error('[EmailService] Simulated transport failure for test verification');
       return { success: false, error: 'Simulated email provider network failure' };
@@ -234,7 +367,7 @@ export async function sendVerificationEmail({ to, verificationToken, userName = 
     };
   }
 
-  // 3. Official Resend SDK Dispatch
+  // 4. Official Resend SDK Dispatch
   const resend = getResendClient();
   if (!resend) {
     const errorMsg = 'Resend client is uninitialized: RESEND_API_KEY is missing.';

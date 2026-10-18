@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Mail, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 import api from '../../api/client';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
@@ -9,15 +9,21 @@ export const ForgotPasswordPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setErrorMessage('');
     try {
       await api.post('/auth/forgot-password', { email });
       setIsSubmitted(true);
-    } catch {
-      setIsSubmitted(true); // Don't disclose account existence
+    } catch (err: any) {
+      if (err.status === 502 || err.response?.status === 502) {
+        setErrorMessage(err.message || "We couldn't send your password reset email. Please try again.");
+      } else {
+        setIsSubmitted(true); // Don't disclose account existence for security
+      }
     } finally {
       setIsLoading(false);
     }
@@ -36,6 +42,13 @@ export const ForgotPasswordPage: React.FC = () => {
             Enter your verified email address and we'll send password recovery instructions.
           </p>
         </div>
+
+        {errorMessage && (
+          <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
         {isSubmitted ? (
           <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-center space-y-3">
