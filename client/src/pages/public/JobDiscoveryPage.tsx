@@ -28,6 +28,9 @@ import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { JobMap } from '../../components/common/JobMap';
 import { formatPayWithBasis } from '../../utils/currency';
 
+// Feature flag: set to true to restore the natural language AI conversational search banner
+const SHOW_AI_SEARCH_BANNER = false;
+
 export const JobDiscoveryPage: React.FC = () => {
   const { user } = useAuth();
   const { success, error: toastError, info } = useToast();
@@ -217,31 +220,33 @@ export const JobDiscoveryPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Natural Language AI Conversational Search Box */}
-      <Card className="p-4 bg-gradient-to-r from-emerald-50/60 via-white to-slate-50 border-emerald-200/80">
-        <form onSubmit={handleNlSearch} className="flex flex-col sm:flex-row items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-            <Sparkles className="w-4 h-4" />
-          </div>
-          <div className="flex-1 w-full">
-            <input
-              type="text"
-              value={nlQuery}
-              onChange={(e) => setNlQuery(e.target.value)}
-              placeholder="Ask naturally: e.g., 'Packing or warehouse jobs this weekend over ₹500/shift near Atigre'"
-              className="w-full text-xs sm:text-sm bg-transparent placeholder-slate-400 focus:outline-none text-slate-900 font-medium"
-            />
-          </div>
-          <Button
-            type="submit"
-            size="sm"
-            isLoading={isNlSearching}
-            className="w-full sm:w-auto shrink-0"
-          >
-            Ask AI Search
-          </Button>
-        </form>
-      </Card>
+      {/* Natural Language AI Conversational Search Box (Temporarily hidden via feature flag) */}
+      {SHOW_AI_SEARCH_BANNER && (
+        <Card className="p-4 bg-gradient-to-r from-emerald-50/60 via-white to-slate-50 border-emerald-200/80">
+          <form onSubmit={handleNlSearch} className="flex flex-col sm:flex-row items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div className="flex-1 w-full">
+              <input
+                type="text"
+                value={nlQuery}
+                onChange={(e) => setNlQuery(e.target.value)}
+                placeholder="Ask naturally: e.g., 'Packing or warehouse jobs this weekend over ₹500/shift near Atigre'"
+                className="w-full text-xs sm:text-sm bg-transparent placeholder-slate-400 focus:outline-none text-slate-900 font-medium"
+              />
+            </div>
+            <Button
+              type="submit"
+              size="sm"
+              isLoading={isNlSearching}
+              className="w-full sm:w-auto shrink-0"
+            >
+              Ask AI Search
+            </Button>
+          </form>
+        </Card>
+      )}
 
       {/* Main Content Area */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
