@@ -23,6 +23,7 @@ import { Modal } from '../../components/common/Modal';
 import { ScoreBreakdown } from '../../components/common/ScoreBreakdown';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { EmptyState } from '../../components/common/EmptyState';
+import { formatPayWithBasis } from '../../utils/currency';
 
 export const WorkerRecommendationsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -204,8 +205,7 @@ export const WorkerRecommendationsPage: React.FC = () => {
                 <div className="sm:text-right shrink-0 flex flex-col justify-between sm:items-end gap-3 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-100 w-full sm:w-auto">
                   <div>
                     <div className="text-2xl font-black text-slate-900">
-                      {job.currency === 'INR' ? '₹' : '$'}{job.grossPay}
-                      <span className="text-xs font-normal text-slate-500"> / {job.payBasis}</span>
+                      {formatPayWithBasis(job.grossPay, job.payBasis)}
                     </div>
                     <span className="text-[11px] text-slate-400">
                       {job.openings - job.filledCount} opening{job.openings === 1 ? '' : 's'} remaining

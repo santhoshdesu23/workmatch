@@ -65,7 +65,7 @@ export const getJobs = async (req, res, next) => {
     }
 
     if (category) {
-      query.category = category;
+      query.category = { $regex: `^${category.trim()}$`, $options: 'i' };
     }
 
     if (locality) {
@@ -366,7 +366,7 @@ export const createJob = async (req, res, next) => {
       totalHours,
       grossPay,
       payBasis = 'hourly',
-      currency = 'USD',
+      currency = 'INR',
       paymentMethod,
       paymentTiming,
       experienceRequirement,
@@ -385,6 +385,13 @@ export const createJob = async (req, res, next) => {
     }
     if (!description || description.trim().length < 10) {
       return res.status(400).json({ success: false, message: 'Job description is required (at least 10 characters).' });
+    }
+    if (!category || typeof category !== 'string' || !category.trim()) {
+      return res.status(400).json({ success: false, message: 'Job category is required.' });
+    }
+    const trimmedCategory = category.trim();
+    if (trimmedCategory.length > 60) {
+      return res.status(400).json({ success: false, message: 'Job category cannot exceed 60 characters.' });
     }
     if (!locationName || !locationName.trim()) {
       return res.status(400).json({ success: false, message: 'Location address or venue description is required.' });
@@ -433,7 +440,7 @@ export const createJob = async (req, res, next) => {
       employer: employerId,
       title: title.trim(),
       description: description.trim(),
-      category,
+      category: trimmedCategory,
       requiredSkills: Array.isArray(requiredSkills) ? requiredSkills : (requiredSkills || '').split(',').map((s) => s.trim()).filter(Boolean),
       openings: Number(openings) || 1,
       locationName: locationName.trim(),
@@ -542,6 +549,17 @@ export const updateJob = async (req, res, next) => {
       }
     }
 
+    // Validate category
+    if (safeUpdates.category !== undefined) {
+      if (!safeUpdates.category || typeof safeUpdates.category !== 'string' || !safeUpdates.category.trim()) {
+        return res.status(400).json({ success: false, message: 'Job category cannot be empty.' });
+      }
+      safeUpdates.category = safeUpdates.category.trim();
+      if (safeUpdates.category.length > 60) {
+        return res.status(400).json({ success: false, message: 'Job category cannot exceed 60 characters.' });
+      }
+    }
+
     // Validate grossPay
     if (safeUpdates.grossPay !== undefined) {
       const parsedPay = Number(safeUpdates.grossPay);
@@ -594,7 +612,7 @@ export const updateJob = async (req, res, next) => {
       if (safeUpdates.grossPay !== undefined && safeUpdates.grossPay < job.grossPay) {
         return res.status(400).json({
           success: false,
-          message: `Cannot reduce pay rate from $${job.grossPay} to $${safeUpdates.grossPay}: ${activeAssignmentsCount} candidate(s) are already confirmed for this shift.`
+          message: `Cannot reduce pay rate from ₹${job.grossPay} to ₹${safeUpdates.grossPay}: ${activeAssignmentsCount} candidate(s) are already confirmed for this shift.`
         });
       }
       if (

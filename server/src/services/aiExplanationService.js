@@ -36,8 +36,8 @@ export class AiExplanationService {
 
       const prompt = `
 You are the WorkMatch AI assistant. Explain in 2 concise, honest sentences why this job is or isn't a strong match for this worker.
-Job: ${safeTitle} in ${safeCat}. Pay: $${Number(job.grossPay) || 0} (${sanitizeForPrompt(job.payBasis, 20)}). Required skills: ${safeReqSkills}.
-Worker skills: ${safeWorkerSkills}. Expected pay: $${Number(workerProfile?.expectedPay?.min) || 0}. Match Score: ${matchResult.matchScore}/100.
+Job: ${safeTitle} in ${safeCat}. Pay: ₹${Number(job.grossPay) || 0} (${sanitizeForPrompt(job.payBasis, 20)}). Required skills: ${safeReqSkills}.
+Worker skills: ${safeWorkerSkills}. Expected pay: ₹${Number(workerProfile?.expectedPay?.min) || 0}. Match Score: ${matchResult.matchScore}/100.
 Distance: ${matchResult.distanceKm !== null ? matchResult.distanceKm + ' km' : 'Unknown'}.
 Tone: Professional, supportive, objective. Do not make false guarantees.
 `;

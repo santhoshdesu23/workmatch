@@ -8,6 +8,7 @@ import { Badge } from '../../components/common/Badge';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { EmptyState } from '../../components/common/EmptyState';
 import { Button } from '../../components/common/Button';
+import { formatINR } from '../../utils/currency';
 
 export const WorkerPaymentsPage: React.FC = () => {
   const { success, error: toastError } = useToast();
@@ -90,7 +91,7 @@ export const WorkerPaymentsPage: React.FC = () => {
           <div className="text-xs font-semibold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Total Disbursed / Paid
           </div>
-          <div className="text-3xl font-black text-slate-900">${summary.totalPaid.toFixed(2)}</div>
+          <div className="text-3xl font-black text-slate-900">{formatINR(summary.totalPaid)}</div>
           <p className="text-[11px] text-slate-500">{summary.countPaid} completed payment records</p>
         </Card>
 
@@ -98,7 +99,7 @@ export const WorkerPaymentsPage: React.FC = () => {
           <div className="text-xs font-semibold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
             <Clock className="w-4 h-4 text-amber-600" /> Pending / Processing
           </div>
-          <div className="text-3xl font-black text-slate-900">${summary.totalPending.toFixed(2)}</div>
+          <div className="text-3xl font-black text-slate-900">{formatINR(summary.totalPending)}</div>
           <p className="text-[11px] text-slate-500">{summary.countPending} shifts awaiting disbursement</p>
         </Card>
       </div>
@@ -154,7 +155,7 @@ export const WorkerPaymentsPage: React.FC = () => {
                   <div className="sm:text-right flex flex-col sm:items-end gap-2">
                     <div>
                       <div className="text-xl font-black text-slate-900">
-                        ${p.amount.toFixed(2)}
+                        {formatINR(p.amount)}
                       </div>
                       <span className="text-xs text-slate-400">Rate basis: {p.basis}</span>
                     </div>

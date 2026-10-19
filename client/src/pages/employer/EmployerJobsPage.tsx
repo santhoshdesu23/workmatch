@@ -23,6 +23,7 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { EmptyState } from '../../components/common/EmptyState';
+import { formatPayWithBasis } from '../../utils/currency';
 
 export const EmployerJobsPage: React.FC = () => {
   const { success, error: toastError } = useToast();
@@ -81,7 +82,7 @@ export const EmployerJobsPage: React.FC = () => {
     if (!editingJob) return;
 
     if (editGrossPay <= 0) {
-      toastError('Gross pay must be greater than $0.');
+      toastError('Gross pay must be greater than ₹0.');
       return;
     }
 
@@ -219,7 +220,7 @@ export const EmployerJobsPage: React.FC = () => {
                 {/* Right Pay & Candidate Actions */}
                 <div className="sm:text-right shrink-0 flex flex-col justify-between sm:items-end gap-3 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                   <div className="text-xl font-black text-slate-900">
-                    ${job.grossPay} <span className="text-xs font-normal text-slate-500">/{job.payBasis}</span>
+                    {formatPayWithBasis(job.grossPay, job.payBasis)}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
@@ -328,7 +329,7 @@ export const EmployerJobsPage: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Offered Pay ($)</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Offered Pay (₹)</label>
               <input
                 type="number"
                 min="1"

@@ -23,6 +23,7 @@ import { Job, Application, Assignment, NotificationItem, WorkerProfile } from '.
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
+import { formatPayWithBasis, formatINR } from '../../utils/currency';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 
 export const WorkerDashboardPage: React.FC = () => {
@@ -275,7 +276,7 @@ export const WorkerDashboardPage: React.FC = () => {
 
                     <div className="text-right shrink-0">
                       <div className="text-base font-extrabold text-slate-900">
-                        {job.currency === 'INR' ? '₹' : '$'}{job.grossPay} <span className="text-xs font-normal text-slate-500">/{job.payBasis}</span>
+                        {formatPayWithBasis(job.grossPay, job.payBasis)}
                       </div>
                       <Link to={`/jobs/${job._id}`} className="inline-block mt-2">
                         <Button size="sm">View Shift</Button>
@@ -317,7 +318,7 @@ export const WorkerDashboardPage: React.FC = () => {
                       <span>{assign.agreedSchedule.startTime} – {assign.agreedSchedule.endTime}</span>
                     </div>
                     <div className="text-[11px] text-emerald-700 font-semibold pt-1">
-                      Agreed Pay: ${assign.agreedPayment.grossAmount} ({assign.agreedPayment.basis})
+                      Agreed Pay: {formatINR(assign.agreedPayment.grossAmount)} ({assign.agreedPayment.basis})
                     </div>
                   </div>
                 ))}

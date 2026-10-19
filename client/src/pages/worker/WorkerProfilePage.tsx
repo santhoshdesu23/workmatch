@@ -435,7 +435,7 @@ export const WorkerProfilePage: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Target Minimum ($)</label>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Target Minimum (₹)</label>
               <input
                 type="number"
                 min="0"
@@ -446,7 +446,7 @@ export const WorkerProfilePage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Target Maximum ($)</label>
+              <label className="block text-xs font-medium text-slate-700 mb-1">Target Maximum (₹)</label>
               <input
                 type="number"
                 min="0"

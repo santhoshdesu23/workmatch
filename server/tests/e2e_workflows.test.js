@@ -123,9 +123,21 @@ describe('Phase Ten: Complete End-to-End User Journeys', () => {
           skills: ['Banquet Service', 'Team Leadership', 'Fine Dining'],
           preferredCategories: ['Event assistance'],
           travelRadiusKm: 30,
+          coordinates: [-73.985, 40.748],
           expectedPay: { min: 30, max: 45, basis: 'hourly' }
         });
       expect(profUpdate.status).toBe(200);
+
+      // Update worker availability
+      const availUpdate = await request(app)
+        .patch('/api/workers/me/availability')
+        .set('Authorization', `Bearer ${workerToken}`)
+        .send({
+          isAvailable: true,
+          days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+          timeSlots: ['Morning', 'Afternoon', 'Evening']
+        });
+      expect(availUpdate.status).toBe(200);
     });
 
     it('Worker discovers published jobs and receives transparent explainable match scores', async () => {

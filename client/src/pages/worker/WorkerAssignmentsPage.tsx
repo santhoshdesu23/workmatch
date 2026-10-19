@@ -19,6 +19,7 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { EmptyState } from '../../components/common/EmptyState';
+import { formatINR } from '../../utils/currency';
 
 export const WorkerAssignmentsPage: React.FC = () => {
   const { success, error: toastError } = useToast();
@@ -146,9 +147,8 @@ export const WorkerAssignmentsPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <DollarSign className="w-4 h-4 text-emerald-600" />
                       <span className="font-semibold text-slate-900">
-                        Agreed: ${assign.agreedPayment.grossAmount} ({assign.agreedPayment.basis})
+                        Agreed: {formatINR(assign.agreedPayment.grossAmount)} ({assign.agreedPayment.basis})
                       </span>
                     </div>
 

@@ -267,21 +267,21 @@ export function evaluatePaymentScore(expectedPay, jobGrossPay, jobPayBasis, jobH
   if (effectiveExpectedHourly <= 0) {
     return {
       score: 1.0,
-      explanation: `Offered rate of $${pay} (${jobPayBasis || 'hourly'}) matches your compensation criteria.`
+      explanation: `Offered rate of ₹${pay} (${jobPayBasis || 'hourly'}) matches your compensation criteria.`
     };
   }
 
   if (effectiveJobHourly >= effectiveExpectedHourly) {
     return {
       score: 1.0,
-      explanation: `Offered pay ($${pay} / ${jobPayBasis || 'hourly'}) meets or exceeds your minimum requirement.`
+      explanation: `Offered pay (₹${pay} / ${jobPayBasis || 'hourly'}) meets or exceeds your minimum requirement.`
     };
   } else {
     const ratio = effectiveJobHourly / effectiveExpectedHourly;
     const score = Math.max(0.2, Math.min(0.99, ratio));
     return {
       score,
-      explanation: `Offered rate ($${pay} / ${jobPayBasis || 'hourly'}) is slightly below your target rate.`
+      explanation: `Offered rate (₹${pay} / ${jobPayBasis || 'hourly'}) is slightly below your target rate.`
     };
   }
 }
@@ -290,35 +290,36 @@ export function evaluatePaymentScore(expectedPay, jobGrossPay, jobPayBasis, jobH
  * Evaluates category and experience compatibility
  */
 export function evaluateCategoryScore(preferredCategories = [], jobCategory = '', experienceSummary = '') {
-  if (!jobCategory) {
+  if (!jobCategory || typeof jobCategory !== 'string' || !jobCategory.trim()) {
     return {
       score: 0.5,
       explanation: 'General temporary work opportunity.'
     };
   }
 
+  const trimmedCat = jobCategory.trim();
   const safePreferred = Array.isArray(preferredCategories) ? preferredCategories : [];
   const matchedCat = safePreferred.some(
-    (c) => typeof c === 'string' && c.toLowerCase() === jobCategory.toLowerCase()
+    (c) => typeof c === 'string' && c.trim().toLowerCase() === trimmedCat.toLowerCase()
   );
 
   if (matchedCat) {
     return {
       score: 1.0,
-      explanation: `Direct match with your preferred category "${jobCategory}".`
+      explanation: `Direct match with your preferred category "${trimmedCat}".`
     };
   }
 
   if (safePreferred.length === 0) {
     return {
       score: 0.7,
-      explanation: `Job in "${jobCategory}". Open category preferences recorded.`
+      explanation: `Job in "${trimmedCat}". Open category preferences recorded.`
     };
   }
 
   return {
     score: 0.4,
-    explanation: `Job is in "${jobCategory}", outside your preferred primary categories.`
+    explanation: `Job is in "${trimmedCat}", outside your preferred primary categories.`
   };
 }
 

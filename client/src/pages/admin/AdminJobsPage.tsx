@@ -7,6 +7,7 @@ import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
+import { formatPayWithBasis } from '../../utils/currency';
 
 export const AdminJobsPage: React.FC = () => {
   const { success, error: toastError } = useToast();
@@ -86,7 +87,7 @@ export const AdminJobsPage: React.FC = () => {
                     <span>{new Date(job.workDate).toLocaleDateString()}</span>
                   </div>
                   <div>
-                    Pay: <span className="font-bold text-slate-800">${job.grossPay} / {job.payBasis}</span>
+                    Pay: <span className="font-bold text-slate-800">{formatPayWithBasis(job.grossPay, job.payBasis)}</span>
                   </div>
                 </div>
 

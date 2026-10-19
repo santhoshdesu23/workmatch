@@ -29,6 +29,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
 import { Badge } from '../../components/common/Badge';
+import { formatPayWithBasis, formatINR } from '../../utils/currency';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { Job } from '../../types';
 
@@ -401,9 +402,8 @@ export const LandingPage: React.FC = () => {
                       {/* Pay Badge */}
                       <div className="text-right">
                         <span className="text-lg font-black text-slate-900">
-                          {job.currency === 'INR' ? '₹' : '$'}{job.grossPay}
+                          {formatPayWithBasis(job.grossPay, job.payBasis)}
                         </span>
-                        <span className="text-xs font-medium text-slate-500"> / {job.payBasis}</span>
                       </div>
                     </div>
 
@@ -471,7 +471,7 @@ export const LandingPage: React.FC = () => {
                   {/* Card Footer: Spots & CTA */}
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
                     <span className="text-slate-500 font-medium">
-                      Est. Total: <strong className="text-slate-800">{job.currency === 'INR' ? '₹' : '$'}{estimatedTotal}</strong> • {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left
+                      Est. Total: <strong className="text-slate-800">{formatINR(estimatedTotal)}</strong> • {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left
                     </span>
                     <Button
                       size="sm"

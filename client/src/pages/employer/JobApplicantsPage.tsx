@@ -23,6 +23,7 @@ import { Modal } from '../../components/common/Modal';
 import { ScoreBreakdown } from '../../components/common/ScoreBreakdown';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { EmptyState } from '../../components/common/EmptyState';
+import { formatPayWithBasis } from '../../utils/currency';
 
 export const JobApplicantsPage: React.FC = () => {
   const { jobId } = useParams<{ jobId: string }>();
@@ -121,7 +122,7 @@ export const JobApplicantsPage: React.FC = () => {
               Applicants for: {job?.title}
             </h1>
             <p className="text-xs text-slate-500">
-              {job?.startTime} – {job?.endTime} • Pay: ${job?.grossPay} / {job?.payBasis}
+              {job?.startTime} – {job?.endTime} • Pay: {formatPayWithBasis(job?.grossPay, job?.payBasis)}
             </p>
           </div>
 

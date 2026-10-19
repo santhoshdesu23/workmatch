@@ -14,6 +14,7 @@ import { useToast } from '../../context/ToastContext';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
+import { formatPayWithBasis } from '../../utils/currency';
 
 export const CreateJobPage: React.FC = () => {
   const navigate = useNavigate();
@@ -45,7 +46,9 @@ export const CreateJobPage: React.FC = () => {
 
   // Step 1: Details
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('Event assistance');
+  const [selectedCategory, setSelectedCategory] = useState('Event assistance');
+  const [customCategory, setCustomCategory] = useState('');
+  const [categoryError, setCategoryError] = useState('');
   const [description, setDescription] = useState('');
 
   // Step 2: Location & Schedule
@@ -85,6 +88,10 @@ export const CreateJobPage: React.FC = () => {
     'Cleaning and maintenance',
     'Tutoring and event staffing'
   ];
+  const OTHER_CATEGORY_VALUE = 'OTHER';
+  const OTHER_CATEGORY_LABEL = 'Other (Specify your category)';
+
+  const resolvedCategory = selectedCategory === OTHER_CATEGORY_VALUE ? customCategory.trim() : selectedCategory;
 
   const handleUseBrowserGPS = () => {
     if (!navigator.geolocation) {
@@ -108,6 +115,19 @@ export const CreateJobPage: React.FC = () => {
       if (!title.trim() || title.length < 5) {
         toastError('Please provide a clear job title (at least 5 characters).');
         return false;
+      }
+      if (selectedCategory === OTHER_CATEGORY_VALUE) {
+        const trimmedCustom = customCategory.trim();
+        if (!trimmedCustom) {
+          setCategoryError('Please enter your custom job category.');
+          toastError('Please enter your custom job category.');
+          return false;
+        }
+        if (trimmedCustom.length > 60) {
+          setCategoryError('Job category cannot exceed 60 characters.');
+          toastError('Job category cannot exceed 60 characters.');
+          return false;
+        }
       }
       if (!description.trim() || description.length < 15) {
         toastError('Please provide a descriptive role description (at least 15 characters).');
@@ -148,7 +168,7 @@ export const CreateJobPage: React.FC = () => {
       }
     } else if (step === 4) {
       if (grossPay <= 0) {
-        toastError('Offered pay amount must be greater than $0.');
+        toastError('Offered pay amount must be greater than ₹0.');
         return false;
       }
       if (!applicationDeadline) {
@@ -189,7 +209,7 @@ export const CreateJobPage: React.FC = () => {
       const res = await api.post('/jobs', {
         title,
         description,
-        category,
+        category: resolvedCategory,
         locationName,
         coordinates,
         workDate,
@@ -205,6 +225,7 @@ export const CreateJobPage: React.FC = () => {
         ageRestriction,
         grossPay,
         payBasis,
+        currency: 'INR',
         paymentMethod,
         paymentTiming,
         cancellationPolicy,
@@ -267,17 +288,60 @@ export const CreateJobPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Job Category *</label>
+            <label htmlFor="job-category-select" className="block text-xs font-semibold text-slate-700 mb-1">Job Category *</label>
             <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              id="job-category-select"
+              value={selectedCategory}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedCategory(val);
+                if (val !== OTHER_CATEGORY_VALUE) {
+                  setCustomCategory('');
+                  setCategoryError('');
+                }
+              }}
               className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none cursor-pointer"
             >
               {categories.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
+              <option value={OTHER_CATEGORY_VALUE}>{OTHER_CATEGORY_LABEL}</option>
             </select>
           </div>
+
+          {selectedCategory === OTHER_CATEGORY_VALUE && (
+            <div className="space-y-1">
+              <div className="flex justify-between items-center">
+                <label htmlFor="custom-category-input" className="block text-xs font-semibold text-slate-700">
+                  Enter your job category *
+                </label>
+                <span className="text-[10px] text-slate-400">{customCategory.length}/60</span>
+              </div>
+              <input
+                id="custom-category-input"
+                name="customCategory"
+                type="text"
+                required
+                maxLength={60}
+                value={customCategory}
+                onChange={(e) => {
+                  setCustomCategory(e.target.value);
+                  if (categoryError) setCategoryError('');
+                }}
+                placeholder="e.g., Wedding Photography, Home Tutor, Farm Worker, Delivery Partner"
+                className={`w-full text-xs p-2.5 border rounded-xl focus:outline-none focus:ring-1 transition-colors ${
+                  categoryError
+                    ? 'border-rose-400 focus:ring-rose-500 bg-rose-50/20'
+                    : 'border-slate-200 focus:ring-emerald-500'
+                }`}
+              />
+              {categoryError && (
+                <p id="custom-category-error" className="text-[11px] text-rose-600 font-medium">
+                  {categoryError}
+                </p>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Detailed Shift Responsibilities *</label>
@@ -466,7 +530,7 @@ export const CreateJobPage: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Gross Pay Amount ($) *</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Gross Pay Amount (₹) *</label>
               <input
                 type="number"
                 min="1"
@@ -484,7 +548,7 @@ export const CreateJobPage: React.FC = () => {
                 onChange={(e) => setPayBasis(e.target.value)}
                 className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none cursor-pointer"
               >
-                <option value="hourly">Hourly ($/hr)</option>
+                <option value="hourly">Hourly (₹/hr)</option>
                 <option value="daily">Daily Flat Rate</option>
                 <option value="shift">Shift-based Flat Rate</option>
               </select>
@@ -548,7 +612,7 @@ export const CreateJobPage: React.FC = () => {
 
           <div className="space-y-4">
             <div>
-              <Badge variant="emerald" size="sm">{category}</Badge>
+              <Badge variant="emerald" size="sm">{resolvedCategory}</Badge>
               <h3 className="text-xl font-bold text-slate-900 mt-1">{title}</h3>
               <p className="text-xs text-slate-600 mt-2 whitespace-pre-line leading-relaxed">{description}</p>
             </div>
@@ -564,7 +628,7 @@ export const CreateJobPage: React.FC = () => {
               </div>
               <div>
                 <span className="text-slate-400 block">Offered Pay</span>
-                <span className="font-bold text-emerald-700">${grossPay} / {payBasis}</span>
+                <span className="font-bold text-emerald-700">{formatPayWithBasis(grossPay, payBasis)}</span>
               </div>
               <div>
                 <span className="text-slate-400 block">Openings</span>

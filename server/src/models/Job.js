@@ -22,8 +22,9 @@ const jobSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      required: true,
-      enum: JOB_CATEGORIES,
+      required: [true, 'Job category is required'],
+      trim: true,
+      maxlength: [60, 'Job category cannot exceed 60 characters'],
       index: true
     },
     requiredSkills: {
@@ -129,7 +130,7 @@ const jobSchema = new mongoose.Schema(
     },
     currency: {
       type: String,
-      default: 'USD'
+      default: 'INR'
     },
     paymentMethod: {
       type: String,

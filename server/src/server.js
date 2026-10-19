@@ -2,15 +2,29 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 
-// Look for .env in current directory, parent directory, or fallback to .env.example
-if (fs.existsSync('.env')) {
-  dotenv.config({ path: '.env' });
-} else if (fs.existsSync(path.resolve('..', '.env'))) {
-  dotenv.config({ path: path.resolve('..', '.env') });
-} else if (fs.existsSync('.env.example')) {
-  dotenv.config({ path: '.env.example' });
-} else {
-  dotenv.config();
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const serverEnvPath = path.resolve(__dirname, '..', '.env');
+const rootEnvPath = path.resolve(__dirname, '..', '..', '.env');
+
+// Load root .env first, then server/.env with override if present
+if (fs.existsSync(rootEnvPath)) {
+  dotenv.config({ path: rootEnvPath });
+}
+if (fs.existsSync(serverEnvPath)) {
+  dotenv.config({ path: serverEnvPath, override: true });
+}
+// Fallback to process cwd or .env.example
+if (!fs.existsSync(rootEnvPath) && !fs.existsSync(serverEnvPath)) {
+  if (fs.existsSync('.env')) {
+    dotenv.config({ path: '.env' });
+  } else if (fs.existsSync('.env.example')) {
+    dotenv.config({ path: '.env.example' });
+  } else {
+    dotenv.config();
+  }
 }
 
 // Fail-fast environment validation

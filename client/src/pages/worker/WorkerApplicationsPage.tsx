@@ -21,6 +21,7 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { EmptyState } from '../../components/common/EmptyState';
+import { formatPayWithBasis } from '../../utils/currency';
 
 export const WorkerApplicationsPage: React.FC = () => {
   const { success, error: toastError } = useToast();
@@ -162,7 +163,7 @@ export const WorkerApplicationsPage: React.FC = () => {
                   {/* Pay & Actions */}
                   <div className="sm:text-right shrink-0 flex flex-col justify-between sm:items-end gap-3 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                     <div className="text-lg font-black text-slate-900">
-                      ${job.grossPay} <span className="text-xs font-normal text-slate-500">/{job.payBasis}</span>
+                      {formatPayWithBasis(job.grossPay, job.payBasis)}
                     </div>
 
                     {/* Action buttons depending on state */}

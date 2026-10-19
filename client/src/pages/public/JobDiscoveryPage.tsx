@@ -26,6 +26,7 @@ import { Badge } from '../../components/common/Badge';
 import { EmptyState } from '../../components/common/EmptyState';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { JobMap } from '../../components/common/JobMap';
+import { formatPayWithBasis } from '../../utils/currency';
 
 export const JobDiscoveryPage: React.FC = () => {
   const { user } = useAuth();
@@ -227,7 +228,7 @@ export const JobDiscoveryPage: React.FC = () => {
               type="text"
               value={nlQuery}
               onChange={(e) => setNlQuery(e.target.value)}
-              placeholder="Ask naturally: e.g., 'Packing or warehouse jobs this weekend over $24/hr near Brooklyn'"
+              placeholder="Ask naturally: e.g., 'Packing or warehouse jobs this weekend over ₹500/shift near Atigre'"
               className="w-full text-xs sm:text-sm bg-transparent placeholder-slate-400 focus:outline-none text-slate-900 font-medium"
             />
           </div>
@@ -343,7 +344,7 @@ export const JobDiscoveryPage: React.FC = () => {
 
             {/* Minimum Pay */}
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1.5">Minimum Rate ($/hr)</label>
+              <label className="block text-xs font-medium text-slate-700 mb-1.5">Minimum Rate (₹)</label>
               <input
                 type="number"
                 min="0"
@@ -513,8 +514,7 @@ export const JobDiscoveryPage: React.FC = () => {
                     <div className="sm:text-right shrink-0 flex flex-col justify-between sm:items-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                       <div>
                         <div className="text-lg font-extrabold text-slate-900">
-                          {job.currency === 'INR' ? '₹' : '$'}{job.grossPay}
-                          <span className="text-xs font-normal text-slate-500"> / {job.payBasis}</span>
+                          {formatPayWithBasis(job.grossPay, job.payBasis)}
                         </div>
                         <div className="text-[11px] text-slate-400 mt-0.5">
                           {job.openings - job.filledCount} of {job.openings} opening{job.openings === 1 ? '' : 's'} left

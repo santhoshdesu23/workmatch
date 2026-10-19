@@ -34,7 +34,7 @@ const assignmentSchema = new mongoose.Schema(
     },
     agreedPayment: {
       grossAmount: { type: Number, required: true },
-      currency: { type: String, default: 'USD' },
+      currency: { type: String, default: 'INR' },
       basis: { type: String, default: 'hourly' }
     },
     status: {
