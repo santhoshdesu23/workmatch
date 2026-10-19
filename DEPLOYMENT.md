@@ -47,7 +47,7 @@ This guide provides exhaustive documentation for deploying WorkMatch in producti
 | `EMAIL_PROVIDER` | **Yes** | — | Backend | Must be set to `brevo` or `resend` in production. Boot will fail fast if set to `mock` or omitted in production. |
 | `BREVO_API_KEY` | Conditional | — | Backend | Official Brevo API key (required if `EMAIL_PROVIDER=brevo`). |
 | `RESEND_API_KEY` | Conditional | — | Backend | Official Resend API key (`re_...`, required if `EMAIL_PROVIDER=resend`). |
-| `EMAIL_FROM` | **Yes** | — | Backend | Verified sender header (e.g. `WorkMatch Security <your_verified_sender@example.com>`). Must match an approved sender in your Brevo or Resend account. |
+| `EMAIL_FROM` | **Yes** | — | Backend | Verified sender header (e.g. `WorkMatch Security <santhoshdesu23@gmail.com>`). Must match an approved sender in your Brevo or Resend account. |
 | `RATE_LIMIT_STORE` | Optional | — | Backend | `memory` (default) for single-instance, or `redis` for multi-instance horizontal scaling. |
 | `REDIS_URL` | Conditional | — | Backend | Redis connection string (required in production if `RATE_LIMIT_STORE=redis`). |
 | `GEMINI_API_KEY` | Optional | — | Backend | Google Gemini API Key. If absent, WorkMatch seamlessly falls back to the deterministic explainable rule engine. |
@@ -63,7 +63,7 @@ WorkMatch supports Brevo (official HTTPS REST API, ideal for Render free tier wh
 - **Option A: Brevo Configuration (Recommended on Render):**
   - `EMAIL_PROVIDER=brevo`
   - `BREVO_API_KEY=<your_brevo_api_key>`
-  - `EMAIL_FROM=WorkMatch Security <your_verified_sender@example.com>`
+  - `EMAIL_FROM=WorkMatch Security <santhoshdesu23@gmail.com>`
   - `CLIENT_URL=https://<your-frontend>.vercel.app`
 
 - **Option B: Resend Configuration:**

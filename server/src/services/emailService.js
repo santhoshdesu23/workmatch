@@ -12,33 +12,106 @@ let customResendClient = null;
 let customBrevoFetch = null;
 
 /**
- * Parses sender name and email from an RFC-style from header or email string.
- * Example: "WorkMatch Security <security@workmatch.app>" => { name: "WorkMatch Security", email: "security@workmatch.app" }
+ * Detects if a given sender string or email address contains a placeholder/dummy value.
+ * Matches:
+ * - your_verified_sender_email@example.com
+ * - your_verified_sender@example.com
+ * - any @example.com, @example.org, @example.net, @test.local
+ * - strings containing 'placeholder' or 'your_verified'
  */
-export function parseEmailFrom(fromHeader) {
-  const defaultEmail = 'security@workmatch.app';
-  const defaultName = 'WorkMatch Security';
+export function isPlaceholderSender(senderStrOrEmail) {
+  if (!senderStrOrEmail || typeof senderStrOrEmail !== 'string') return false;
+  const lower = senderStrOrEmail.toLowerCase().trim();
+  const placeholderPatterns = [
+    /your_verified_sender_email@example\.com/i,
+    /your_verified_sender@example\.com/i,
+    /@example\.(com|org|net)$/i,
+    /@example\.(com|org|net)>/i,
+    /<.*@example\.(com|org|net)>/i,
+    /example\.com/i,
+    /your_verified_sender/i,
+    /your_email/i,
+    /placeholder/i
+  ];
+  return placeholderPatterns.some((pattern) => pattern.test(lower));
+}
+
+export function parseEmailFrom(fromHeader, defaultEmail = 'security@workmatch.app', defaultName = 'WorkMatch Security') {
   if (!fromHeader || typeof fromHeader !== 'string') {
     return { name: defaultName, email: defaultEmail };
   }
-  const trimmed = fromHeader.trim();
+  const trimmed = fromHeader.trim().replace(/^["']|["']$/g, '').trim();
   const match = trimmed.match(/^(?:(.*?)<)?([^<>]+)>?$/);
   if (!match) {
-    return { name: defaultName, email: trimmed };
+    const cleanEmail = trimmed.replace(/^["']|["']$/g, '').trim();
+    return { name: defaultName, email: cleanEmail || defaultEmail };
   }
-  const name = match[1] ? match[1].trim().replace(/^["']|["']$/g, '') : defaultName;
-  const email = match[2] ? match[2].trim() : defaultEmail;
-  return { name: name || defaultName, email };
+  const name = match[1] ? match[1].trim().replace(/^["']|["']$/g, '').trim() : defaultName;
+  const email = match[2] ? match[2].trim().replace(/^["']|["']$/g, '').trim() : defaultEmail;
+  return { name: name || defaultName, email: email || defaultEmail };
 }
 
 /**
- * Validates email configuration for production safety.
- * Must fail fast if production attempts to boot without valid credentials.
+ * Resolves the effective, verified sender for transactional email delivery.
+ * Enforces verified sender defaults (e.g. santhoshdesu23@gmail.com for Brevo)
+ * and guards against unconfigured placeholder addresses.
+ *
+ * @param {string} [provider] - 'brevo', 'resend', or 'mock'
+ * @returns {{ name: string, email: string, formatted: string }}
+ */
+export function resolveSender(provider = process.env.EMAIL_PROVIDER) {
+  const providerLower = (provider || '').toLowerCase();
+  const defaultBrevoEmail = 'santhoshdesu23@gmail.com';
+  const defaultResendEmail = 'security@workmatch.app';
+  const defaultName = 'WorkMatch Security';
+
+  const defaultEmail = providerLower === 'brevo' ? defaultBrevoEmail : defaultResendEmail;
+
+  const rawFrom = process.env.EMAIL_FROM;
+
+  // If EMAIL_FROM is unset, empty, or contains a placeholder
+  if (!rawFrom || rawFrom.trim() === '' || isPlaceholderSender(rawFrom)) {
+    if (rawFrom && isPlaceholderSender(rawFrom)) {
+      console.warn(
+        `[EmailService] Detected placeholder address in EMAIL_FROM ("${rawFrom}"). Safe fallback engaged: using verified sender "${defaultEmail}".`
+      );
+    }
+    return {
+      name: defaultName,
+      email: defaultEmail,
+      formatted: `${defaultName} <${defaultEmail}>`
+    };
+  }
+
+  const parsed = parseEmailFrom(rawFrom, defaultEmail, defaultName);
+
+  if (isPlaceholderSender(parsed.email)) {
+    console.warn(
+      `[EmailService] Detected parsed placeholder sender "${parsed.email}". Falling back to verified sender "${defaultEmail}".`
+    );
+    return {
+      name: defaultName,
+      email: defaultEmail,
+      formatted: `${defaultName} <${defaultEmail}>`
+    };
+  }
+
+  return {
+    name: parsed.name || defaultName,
+    email: parsed.email || defaultEmail,
+    formatted: `${parsed.name || defaultName} <${parsed.email || defaultEmail}>`
+  };
+}
+
+/**
+ * Validates email configuration for production safety and placeholder prevention.
+ * Must fail fast if production attempts to boot without valid credentials or with placeholder senders.
  */
 export function validateEmailConfig() {
   const isProduction = process.env.NODE_ENV === 'production';
+  const provider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
+
   if (isProduction) {
-    const provider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
     if (provider !== 'resend' && provider !== 'brevo') {
       throw new Error(
         'FATAL CONFIGURATION ERROR: EMAIL_PROVIDER must be explicitly set to "resend" or "brevo" in production. Mock email fallback is prohibited.'
@@ -59,6 +132,16 @@ export function validateEmailConfig() {
           'FATAL CONFIGURATION ERROR: BREVO_API_KEY environment variable is missing or empty in production.'
         );
       }
+    }
+  }
+
+  // Prevent placeholder senders across all environments when a live provider is selected
+  if (provider === 'brevo' || provider === 'resend') {
+    const rawFrom = process.env.EMAIL_FROM;
+    if (rawFrom && isPlaceholderSender(rawFrom)) {
+      throw new Error(
+        `FATAL CONFIGURATION ERROR: EMAIL_FROM contains placeholder address ("${rawFrom}"). You must configure a real, verified sender email (e.g. "WorkMatch Security <santhoshdesu23@gmail.com>").`
+      );
     }
   }
 }
@@ -88,6 +171,12 @@ export function getResendClient() {
  * @returns {Promise<{ success: boolean, messageId?: string, error?: string, statusCode?: number }>}
  */
 export async function sendViaBrevo({ to, senderName, senderEmail, subject, htmlContent, textContent, userName }) {
+  if (isPlaceholderSender(senderEmail)) {
+    const errorMsg = `Brevo dispatch blocked: sender email "${senderEmail}" is a placeholder address. Must use a verified sender address.`;
+    console.error(`[EmailService] ${errorMsg}`);
+    return { success: false, error: errorMsg };
+  }
+
   const apiKey = process.env.BREVO_API_KEY;
   if (!apiKey || apiKey.trim() === '') {
     const errorMsg = 'Brevo dispatch failed: BREVO_API_KEY environment variable is missing.';
@@ -103,6 +192,9 @@ export async function sendViaBrevo({ to, senderName, senderEmail, subject, htmlC
   }
 
   try {
+    // Diagnostic safe logging (Never logs keys, passwords, or tokens)
+    console.log(`[EmailService:BrevoDispatch] provider: brevo | sender: "${senderName || 'WorkMatch Security'}" <${senderEmail}>`);
+
     const res = await fetchFn('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
@@ -176,7 +268,13 @@ export async function sendPasswordResetEmail({ to, resetToken, userName = 'WorkM
 
   const clientUrl = (process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
   const resetUrl = `${clientUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
-  const senderEmail = process.env.EMAIL_FROM || 'WorkMatch Security <security@workmatch.app>';
+
+  const isTest = process.env.NODE_ENV === 'test';
+  const isProduction = process.env.NODE_ENV === 'production';
+  const emailProvider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
+
+  const sender = resolveSender(emailProvider);
+  const senderEmail = sender.formatted;
 
   const subject = 'WorkMatch — Password Reset Request';
   const textContent = `Hello ${userName},\n\nA password reset request was received for your WorkMatch account.\n\nTo reset your password, visit the following secure link (valid for 1 hour):\n${resetUrl}\n\nIf you did not request this password reset, please ignore this email or contact support immediately.\n\n— The WorkMatch Security Team`;
@@ -198,10 +296,6 @@ export async function sendPasswordResetEmail({ to, resetToken, userName = 'WorkM
     </div>
   `;
 
-  const isTest = process.env.NODE_ENV === 'test';
-  const isProduction = process.env.NODE_ENV === 'production';
-  const emailProvider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
-
   // 1. Strict Production Guard: NEVER silently use mock email in production
   if (isProduction && emailProvider !== 'resend' && emailProvider !== 'brevo') {
     const errorMsg = 'Mock email provider is prohibited in production.';
@@ -211,11 +305,10 @@ export async function sendPasswordResetEmail({ to, resetToken, userName = 'WorkM
 
   // 2. Brevo HTTP REST API Dispatch
   if (emailProvider === 'brevo') {
-    const { name: senderName, email: senderEmailParsed } = parseEmailFrom(process.env.EMAIL_FROM || senderEmail);
     return await sendViaBrevo({
       to,
-      senderName,
-      senderEmail: senderEmailParsed,
+      senderName: sender.name,
+      senderEmail: sender.email,
       subject,
       htmlContent,
       textContent,
@@ -296,7 +389,13 @@ export async function sendVerificationEmail({ to, verificationToken, userName = 
 
   const clientUrl = (process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '');
   const verifyUrl = `${clientUrl}/verify-email?token=${encodeURIComponent(verificationToken)}`;
-  const senderEmail = process.env.EMAIL_FROM || 'WorkMatch Security <security@workmatch.app>';
+
+  const isTest = process.env.NODE_ENV === 'test';
+  const isProduction = process.env.NODE_ENV === 'production';
+  const emailProvider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
+
+  const sender = resolveSender(emailProvider);
+  const senderEmail = sender.formatted;
 
   const subject = 'WorkMatch — Verify Your Email Address';
   const textContent = `Hello ${userName},\n\nThank you for joining WorkMatch. Please verify your email address to activate your ability to apply for shifts or publish job listings.\n\nTo verify your email, visit the following secure link (valid for 24 hours):\n${verifyUrl}\n\nIf you did not create a WorkMatch account, please ignore this email.\n\n— The WorkMatch Security Team`;
@@ -318,10 +417,6 @@ export async function sendVerificationEmail({ to, verificationToken, userName = 
     </div>
   `;
 
-  const isTest = process.env.NODE_ENV === 'test';
-  const isProduction = process.env.NODE_ENV === 'production';
-  const emailProvider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
-
   // 1. Strict Production Guard
   if (isProduction && emailProvider !== 'resend' && emailProvider !== 'brevo') {
     const errorMsg = 'Mock email provider is prohibited in production.';
@@ -331,11 +426,10 @@ export async function sendVerificationEmail({ to, verificationToken, userName = 
 
   // 2. Brevo HTTP REST API Dispatch
   if (emailProvider === 'brevo') {
-    const { name: senderName, email: senderEmailParsed } = parseEmailFrom(process.env.EMAIL_FROM || senderEmail);
     return await sendViaBrevo({
       to,
-      senderName,
-      senderEmail: senderEmailParsed,
+      senderName: sender.name,
+      senderEmail: sender.email,
       subject,
       htmlContent,
       textContent,
@@ -398,3 +492,4 @@ export async function sendVerificationEmail({ to, verificationToken, userName = 
     return { success: false, error: err.message };
   }
 }
+

@@ -16,12 +16,10 @@ if (fs.existsSync(rootEnvPath)) {
 if (fs.existsSync(serverEnvPath)) {
   dotenv.config({ path: serverEnvPath, override: true });
 }
-// Fallback to process cwd or .env.example
+// Fallback to process cwd .env if root/server .env are not at expected paths
 if (!fs.existsSync(rootEnvPath) && !fs.existsSync(serverEnvPath)) {
   if (fs.existsSync('.env')) {
     dotenv.config({ path: '.env' });
-  } else if (fs.existsSync('.env.example')) {
-    dotenv.config({ path: '.env.example' });
   } else {
     dotenv.config();
   }
@@ -42,6 +40,12 @@ if (isProduction) {
   }
   if (provider === 'brevo' && (!process.env.BREVO_API_KEY || process.env.BREVO_API_KEY.trim() === '')) {
     missing.push('BREVO_API_KEY');
+  }
+  if (provider === 'brevo' || provider === 'resend') {
+    const rawFrom = process.env.EMAIL_FROM;
+    if (rawFrom && /example\.com|placeholder|your_verified/i.test(rawFrom)) {
+      missing.push(`EMAIL_FROM contains an invalid placeholder address ("${rawFrom}")`);
+    }
   }
   if (missing.length > 0) {
     console.error(`[Server Boot Failure] Missing critical production configuration: ${missing.join(', ')}`);

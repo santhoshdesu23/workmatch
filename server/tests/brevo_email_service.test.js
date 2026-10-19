@@ -6,6 +6,8 @@ import { User } from '../src/models/User.js';
 import {
   validateEmailConfig,
   parseEmailFrom,
+  isPlaceholderSender,
+  resolveSender,
   sendViaBrevo,
   sendVerificationEmail,
   sendPasswordResetEmail,
@@ -30,6 +32,7 @@ describe('Brevo Email Service & Integration Test Suite', () => {
     _testEmailMock.setSimulateFailure(false);
     delete process.env.BREVO_API_KEY;
     delete process.env.RESEND_API_KEY;
+    delete process.env.EMAIL_FROM;
     process.env.EMAIL_PROVIDER = 'mock';
   });
 
@@ -54,7 +57,48 @@ describe('Brevo Email Service & Integration Test Suite', () => {
       expect(empty).toEqual({ name: 'WorkMatch Security', email: 'security@workmatch.app' });
     });
 
-    it('validateEmailConfig enforces production guards for Brevo and Resend', () => {
+    it('isPlaceholderSender correctly identifies placeholder and test domain patterns', () => {
+      expect(isPlaceholderSender('your_verified_sender_email@example.com')).toBe(true);
+      expect(isPlaceholderSender('WorkMatch Security <your_verified_sender_email@example.com>')).toBe(true);
+      expect(isPlaceholderSender('your_verified_sender@example.com')).toBe(true);
+      expect(isPlaceholderSender('test@example.com')).toBe(true);
+      expect(isPlaceholderSender('alert@example.org')).toBe(true);
+      expect(isPlaceholderSender('<placeholder@domain.com>')).toBe(true);
+
+      expect(isPlaceholderSender('santhoshdesu23@gmail.com')).toBe(false);
+      expect(isPlaceholderSender('WorkMatch Security <santhoshdesu23@gmail.com>')).toBe(false);
+      expect(isPlaceholderSender('WorkMatch Security <security@workmatch.app>')).toBe(false);
+      expect(isPlaceholderSender('notifications@company.org')).toBe(false);
+    });
+
+    it('resolveSender correctly resolves verified Brevo defaults and catches placeholders', () => {
+      // 1. Brevo default when EMAIL_FROM is unset
+      delete process.env.EMAIL_FROM;
+      const defaultBrevo = resolveSender('brevo');
+      expect(defaultBrevo.name).toBe('WorkMatch Security');
+      expect(defaultBrevo.email).toBe('santhoshdesu23@gmail.com');
+      expect(defaultBrevo.formatted).toBe('WorkMatch Security <santhoshdesu23@gmail.com>');
+
+      // 2. Brevo fallback when EMAIL_FROM is a placeholder
+      process.env.EMAIL_FROM = 'WorkMatch Security <your_verified_sender_email@example.com>';
+      const placeholderBrevo = resolveSender('brevo');
+      expect(placeholderBrevo.email).toBe('santhoshdesu23@gmail.com');
+      expect(placeholderBrevo.name).toBe('WorkMatch Security');
+
+      // 3. Brevo when valid verified address is configured
+      process.env.EMAIL_FROM = 'WorkMatch Security <santhoshdesu23@gmail.com>';
+      const verifiedBrevo = resolveSender('brevo');
+      expect(verifiedBrevo.email).toBe('santhoshdesu23@gmail.com');
+      expect(verifiedBrevo.name).toBe('WorkMatch Security');
+
+      // 4. Plain email address configuration
+      process.env.EMAIL_FROM = 'santhoshdesu23@gmail.com';
+      const plainBrevo = resolveSender('brevo');
+      expect(plainBrevo.email).toBe('santhoshdesu23@gmail.com');
+      expect(plainBrevo.name).toBe('WorkMatch Security');
+    });
+
+    it('validateEmailConfig enforces production guards and rejects placeholder senders', () => {
       process.env.NODE_ENV = 'production';
 
       // Mock prohibited in production
@@ -70,8 +114,13 @@ describe('Brevo Email Service & Integration Test Suite', () => {
       delete process.env.BREVO_API_KEY;
       expect(() => validateEmailConfig()).toThrow(/BREVO_API_KEY environment variable is missing/i);
 
-      // Brevo valid key
+      // Brevo with placeholder EMAIL_FROM fails validation
       process.env.BREVO_API_KEY = 'xkeysib-valid-test-key';
+      process.env.EMAIL_FROM = 'WorkMatch Security <your_verified_sender_email@example.com>';
+      expect(() => validateEmailConfig()).toThrow(/EMAIL_FROM contains placeholder address/i);
+
+      // Brevo valid key and verified sender
+      process.env.EMAIL_FROM = 'WorkMatch Security <santhoshdesu23@gmail.com>';
       expect(() => validateEmailConfig()).not.toThrow();
 
       // Resend missing key
@@ -79,8 +128,13 @@ describe('Brevo Email Service & Integration Test Suite', () => {
       delete process.env.RESEND_API_KEY;
       expect(() => validateEmailConfig()).toThrow(/RESEND_API_KEY environment variable is missing/i);
 
-      // Resend valid key
+      // Resend with placeholder EMAIL_FROM fails validation
       process.env.RESEND_API_KEY = 're_valid_test_key';
+      process.env.EMAIL_FROM = 'WorkMatch Security <your_verified_sender_email@example.com>';
+      expect(() => validateEmailConfig()).toThrow(/EMAIL_FROM contains placeholder address/i);
+
+      // Resend valid key
+      process.env.EMAIL_FROM = 'WorkMatch Security <security@workmatch.app>';
       expect(() => validateEmailConfig()).not.toThrow();
 
       process.env.NODE_ENV = 'test';
@@ -196,6 +250,28 @@ describe('Brevo Email Service & Integration Test Suite', () => {
       expect(result.error).toContain('Hourly email quota exceeded');
     });
 
+    it('blocks dispatch when senderEmail is a placeholder address', async () => {
+      process.env.BREVO_API_KEY = 'xkeysib-test-key';
+      let fetchCalled = false;
+      _testEmailMock.setBrevoFetch(async () => {
+        fetchCalled = true;
+        return { ok: true, status: 201, json: async () => ({ messageId: '123' }) };
+      });
+
+      const result = await sendViaBrevo({
+        to: 'recipient@example.com',
+        senderName: 'WorkMatch Security',
+        senderEmail: 'your_verified_sender_email@example.com',
+        subject: 'Test',
+        htmlContent: 'Test',
+        textContent: 'Test'
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('is a placeholder address');
+      expect(fetchCalled).toBe(false);
+    });
+
     it('handles network exception during dispatch without crashing', async () => {
       process.env.BREVO_API_KEY = 'xkeysib-test-key';
 
@@ -221,6 +297,101 @@ describe('Brevo Email Service & Integration Test Suite', () => {
   // 3. Authentication Flows with Brevo Delivery
   // =========================================================================
   describe('Authentication Flows with Brevo Provider Active', () => {
+    it('Registration: dispatches via Brevo using configured verified sender santhoshdesu23@gmail.com', async () => {
+      process.env.EMAIL_PROVIDER = 'brevo';
+      process.env.BREVO_API_KEY = 'xkeysib-test-key';
+      process.env.EMAIL_FROM = 'WorkMatch Security <santhoshdesu23@gmail.com>';
+
+      let capturedBody = null;
+      _testEmailMock.setBrevoFetch(async (url, options) => {
+        capturedBody = JSON.parse(options.body);
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ messageId: 'msg-santhosh-verified' })
+        };
+      });
+
+      const email = `brevo.santhosh.${Date.now()}@test.local`;
+      const res = await request(app).post('/api/auth/register').send({
+        name: 'Santhosh Brevo User',
+        email,
+        password: 'Password123!',
+        role: 'worker'
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.emailSent).toBe(true);
+      expect(capturedBody).not.toBeNull();
+      expect(capturedBody.sender.name).toBe('WorkMatch Security');
+      expect(capturedBody.sender.email).toBe('santhoshdesu23@gmail.com');
+      expect(capturedBody.to[0].email).toBe(email);
+    });
+
+    it('Registration: safely prevents placeholder your_verified_sender_email@example.com from reaching Brevo API', async () => {
+      process.env.EMAIL_PROVIDER = 'brevo';
+      process.env.BREVO_API_KEY = 'xkeysib-test-key';
+      // Mistakenly configured with template placeholder from .env.example
+      process.env.EMAIL_FROM = 'WorkMatch Security <your_verified_sender_email@example.com>';
+
+      let capturedBody = null;
+      _testEmailMock.setBrevoFetch(async (url, options) => {
+        capturedBody = JSON.parse(options.body);
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ messageId: 'msg-placeholder-fallback' })
+        };
+      });
+
+      const email = `brevo.placeholder.${Date.now()}@test.local`;
+      const res = await request(app).post('/api/auth/register').send({
+        name: 'Placeholder Test User',
+        email,
+        password: 'Password123!',
+        role: 'worker'
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(capturedBody).not.toBeNull();
+      // Placeholder was safely stripped and replaced by verified sender
+      expect(capturedBody.sender.name).toBe('WorkMatch Security');
+      expect(capturedBody.sender.email).toBe('santhoshdesu23@gmail.com');
+      expect(capturedBody.sender.email).not.toContain('your_verified_sender_email@example.com');
+    });
+
+    it('Registration: defaults to verified Brevo sender santhoshdesu23@gmail.com when EMAIL_FROM is completely omitted', async () => {
+      process.env.EMAIL_PROVIDER = 'brevo';
+      process.env.BREVO_API_KEY = 'xkeysib-test-key';
+      delete process.env.EMAIL_FROM;
+
+      let capturedBody = null;
+      _testEmailMock.setBrevoFetch(async (url, options) => {
+        capturedBody = JSON.parse(options.body);
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ messageId: 'msg-omitted-fallback' })
+        };
+      });
+
+      const email = `brevo.omitted.${Date.now()}@test.local`;
+      const res = await request(app).post('/api/auth/register').send({
+        name: 'Omitted Test User',
+        email,
+        password: 'Password123!',
+        role: 'worker'
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(capturedBody).not.toBeNull();
+      expect(capturedBody.sender.name).toBe('WorkMatch Security');
+      expect(capturedBody.sender.email).toBe('santhoshdesu23@gmail.com');
+    });
+
     it('Registration: dispatches verification email via Brevo and NEVER leaks devVerificationToken', async () => {
       process.env.EMAIL_PROVIDER = 'brevo';
       process.env.BREVO_API_KEY = 'xkeysib-test-key';
