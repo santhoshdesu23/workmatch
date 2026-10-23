@@ -48,6 +48,13 @@ export const requireAuth = async (req, res, next) => {
       });
     }
 
+    if (user.accountStatus === 'deleted') {
+      return res.status(401).json({
+        success: false,
+        message: 'This account has been deleted.'
+      });
+    }
+
     // Check token revocation via tokenVersion or passwordChangedAt
     if (decoded.tokenVersion !== undefined && user.tokenVersion !== undefined) {
       if (decoded.tokenVersion !== user.tokenVersion) {
@@ -104,7 +111,7 @@ export const optionalAuth = async (req, res, next) => {
       const decoded = verifyToken(token);
       if (decoded && decoded.id) {
         const user = await User.findById(decoded.id).select('-passwordHash');
-        if (user && user.accountStatus !== 'suspended') {
+        if (user && user.accountStatus !== 'suspended' && user.accountStatus !== 'deleted') {
           const versionMatches = decoded.tokenVersion === undefined || user.tokenVersion === undefined || decoded.tokenVersion === user.tokenVersion;
           if (versionMatches) {
             req.user = user;

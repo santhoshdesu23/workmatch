@@ -19,6 +19,7 @@ import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
+import { AccountDeletionSection } from '../../components/common/AccountDeletionSection';
 
 export const WorkerProfilePage: React.FC = () => {
   const { user, refreshUser } = useAuth();
@@ -506,6 +507,7 @@ export const WorkerProfilePage: React.FC = () => {
           </Button>
         </div>
       </form>
+      <AccountDeletionSection />
     </div>
   );
 };

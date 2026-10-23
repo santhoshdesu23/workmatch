@@ -125,6 +125,13 @@ export const updateAdminUserStatus = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'User not found.' });
     }
 
+    if (user.accountStatus === 'deleted') {
+      return res.status(400).json({
+        success: false,
+        message: 'Deleted accounts cannot be reactivated.'
+      });
+    }
+
     const prevStatus = user.accountStatus;
     user.accountStatus = status;
     await user.save();

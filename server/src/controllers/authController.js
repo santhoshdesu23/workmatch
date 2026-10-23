@@ -158,6 +158,13 @@ export const login = async (req, res, next) => {
       });
     }
 
+    if (user.accountStatus === 'deleted') {
+      return res.status(403).json({
+        success: false,
+        message: 'This account has been deleted.'
+      });
+    }
+
     if (user.accountStatus === 'suspended') {
       return res.status(403).json({
         success: false,
