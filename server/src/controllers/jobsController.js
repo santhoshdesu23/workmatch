@@ -7,7 +7,7 @@ import { PaymentRecord } from '../models/PaymentRecord.js';
 import { User } from '../models/User.js';
 import { JobChangeHistory } from '../models/JobChangeHistory.js';
 import { JOB_STATUSES, ROLES, ASSIGNMENT_STATUSES, PAYMENT_STATUSES } from '../config/constants.js';
-import { computeJobMatch, calculateDistanceKm } from '../services/matchingService.js';
+import { computeJobMatch, calculateDistanceKm, calculateDistanceKmPrecise } from '../services/matchingService.js';
 import { createNotification } from '../services/notificationService.js';
 import { computeEmployerReliability } from '../services/reliabilityService.js';
 
@@ -27,6 +27,8 @@ const MATERIAL_FIELDS = [
   'cancellationPolicy',
   'applicationDeadline'
 ];
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export const getJobs = async (req, res, next) => {
   try {
@@ -50,53 +52,74 @@ export const getJobs = async (req, res, next) => {
       limit = 20
     } = req.query;
 
+    const hasLat = lat !== undefined && lat !== '';
+    const hasLng = lng !== undefined && lng !== '';
+    if (hasLat !== hasLng) {
+      return res.status(400).json({ success: false, code: 'INVALID_LOCATION', message: 'Provide both latitude and longitude to search by distance.' });
+    }
+    if (hasLat && (!Number.isFinite(Number(lat)) || Number(lat) < -90 || Number(lat) > 90 || !Number.isFinite(Number(lng)) || Number(lng) < -180 || Number(lng) > 180)) {
+      return res.status(400).json({ success: false, code: 'INVALID_LOCATION', message: 'The search location coordinates are invalid.' });
+    }
+
+    const hasRadius = maxDistanceKm !== undefined && maxDistanceKm !== '';
+    const parsedRadius = hasRadius ? Number(maxDistanceKm) : null;
+    if (hasRadius && (!Number.isFinite(parsedRadius) || parsedRadius <= 0 || parsedRadius > 500)) {
+      return res.status(400).json({ success: false, code: 'INVALID_RADIUS', message: 'Search radius must be between 1 and 500 km.' });
+    }
+    if (hasRadius && !hasLat && !(req.user?.role === ROLES.WORKER)) {
+      return res.status(400).json({ success: false, code: 'LOCATION_REQUIRED', message: 'Choose a location or enable device location before applying a search radius.' });
+    }
+
     const query = { status: JOB_STATUSES.OPEN };
 
     if (search) {
+      const searchTerm = escapeRegex(String(search).trim());
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { requiredSkills: { $regex: search, $options: 'i' } },
-        { locationName: { $regex: search, $options: 'i' } },
-        { locality: { $regex: search, $options: 'i' } },
-        { city: { $regex: search, $options: 'i' } },
-        { district: { $regex: search, $options: 'i' } }
+        { title: { $regex: searchTerm, $options: 'i' } },
+        { description: { $regex: searchTerm, $options: 'i' } },
+        { requiredSkills: { $regex: searchTerm, $options: 'i' } },
+        { locationName: { $regex: searchTerm, $options: 'i' } },
+        { locality: { $regex: searchTerm, $options: 'i' } },
+        { city: { $regex: searchTerm, $options: 'i' } },
+        { district: { $regex: searchTerm, $options: 'i' } }
       ];
     }
 
     if (category) {
-      query.category = { $regex: `^${category.trim()}$`, $options: 'i' };
+      query.category = { $regex: `^${escapeRegex(String(category).trim())}$`, $options: 'i' };
     }
 
-    if (locality) {
-      query.locality = { $regex: `^${locality.trim()}$`, $options: 'i' };
+    // Coordinate radius searches include nearby jobs even when their locality differs.
+    const isCoordinateRadiusSearch = hasRadius && hasLat && hasLng;
+    if (locality && !isCoordinateRadiusSearch) {
+      query.locality = { $regex: `^${escapeRegex(String(locality).trim())}$`, $options: 'i' };
     }
 
-    if (city) {
-      query.city = { $regex: `^${city.trim()}$`, $options: 'i' };
+    if (city && !isCoordinateRadiusSearch) {
+      query.city = { $regex: `^${escapeRegex(String(city).trim())}$`, $options: 'i' };
     }
 
-    if (district) {
-      query.district = { $regex: `^${district.trim()}$`, $options: 'i' };
+    if (district && !isCoordinateRadiusSearch) {
+      query.district = { $regex: `^${escapeRegex(String(district).trim())}$`, $options: 'i' };
     }
 
-    if (state) {
-      query.state = { $regex: `^${state.trim()}$`, $options: 'i' };
+    if (state && !isCoordinateRadiusSearch) {
+      query.state = { $regex: `^${escapeRegex(String(state).trim())}$`, $options: 'i' };
     }
 
-    if (location && !locality && !city && !district) {
-      const locTerm = location.trim();
-      const locOr = [
-        { locality: { $regex: locTerm, $options: 'i' } },
-        { city: { $regex: locTerm, $options: 'i' } },
-        { district: { $regex: locTerm, $options: 'i' } },
-        { locationName: { $regex: locTerm, $options: 'i' } }
-      ];
-      if (query.$or) {
-        query.$and = [{ $or: query.$or }, { $or: locOr }];
-        delete query.$or;
-      } else {
-        query.$or = locOr;
+    if (location && !isCoordinateRadiusSearch) {
+      const locationParts = String(location).split(',').map((part) => part.trim()).filter(Boolean);
+      for (const part of locationParts) {
+        const locTerm = escapeRegex(part);
+        query.$and = [...(query.$and || []), {
+          $or: [
+            { locality: { $regex: `^${locTerm}$`, $options: 'i' } },
+            { city: { $regex: `^${locTerm}$`, $options: 'i' } },
+            { district: { $regex: `^${locTerm}$`, $options: 'i' } },
+            { state: { $regex: `^${locTerm}$`, $options: 'i' } },
+            { locationName: { $regex: `(^|[,\\s])${locTerm}($|[,\\s])`, $options: 'i' } }
+          ]
+        }];
       }
     }
 
@@ -160,6 +183,10 @@ export const getJobs = async (req, res, next) => {
       originLng = Number(workerProfile.location.coordinates[0]);
     }
 
+    if (hasRadius && calculateDistanceKmPrecise(originLat, originLng, originLat, originLng) === null) {
+      return res.status(400).json({ success: false, code: 'LOCATION_REQUIRED', message: 'Choose a valid location or enable device location before applying a search radius.' });
+    }
+
     // Compute distance and match scores
     jobs = jobs.map((job) => {
       const empProf = empProfileMap.get(job.employer?._id?.toString());
@@ -209,12 +236,15 @@ export const getJobs = async (req, res, next) => {
     });
 
     // Distance radius filter: Only retain jobs with reliable distance within maxDistanceKm
-    if (maxDistanceKm) {
-      const maxDist = Number(maxDistanceKm);
-      if (!isNaN(maxDist) && maxDist > 0) {
-        // Distant jobs and jobs with missing coordinates (cannot be proven nearby) are excluded
-        jobs = jobs.filter((j) => j.distanceKm !== null && j.distanceKm <= maxDist);
-      }
+    if (hasRadius) {
+      // Use unrounded Haversine distance so the boundary is accurate; jobs with
+      // missing or uncalibrated coordinates cannot be represented as nearby.
+      jobs = jobs.filter((job) => {
+        const coordinates = job.location?.coordinates;
+        if (!Array.isArray(coordinates) || coordinates.length < 2) return false;
+        const preciseDistance = calculateDistanceKmPrecise(originLat, originLng, coordinates[1], coordinates[0]);
+        return preciseDistance !== null && preciseDistance <= parsedRadius;
+      });
     }
 
     // Sorting

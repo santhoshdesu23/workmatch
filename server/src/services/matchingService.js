@@ -4,6 +4,12 @@ import { MATCH_WEIGHTS } from '../config/constants.js';
  * Calculates great-circle distance between two coordinates in kilometers using Haversine formula
  */
 export function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+  const distance = calculateDistanceKmPrecise(lat1, lon1, lat2, lon2);
+  return distance === null ? null : Math.round(distance * 10) / 10;
+}
+
+/** Calculates unrounded great-circle distance in kilometers for boundary checks. */
+export function calculateDistanceKmPrecise(lat1, lon1, lat2, lon2) {
   const nLat1 = Number(lat1);
   const nLon1 = Number(lon1);
   const nLat2 = Number(lat2);
@@ -31,7 +37,7 @@ export function calculateDistanceKm(lat1, lon1, lat2, lon2) {
       Math.sin(dLon / 2) *
       Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return Math.round(R * c * 10) / 10;
+  return R * c;
 }
 
 /**

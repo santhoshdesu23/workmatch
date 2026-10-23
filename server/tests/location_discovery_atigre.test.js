@@ -8,7 +8,7 @@ import { WorkerProfile } from '../src/models/WorkerProfile.js';
 import { EmployerProfile } from '../src/models/EmployerProfile.js';
 import { Application } from '../src/models/Application.js';
 import { ROLES, JOB_STATUSES, PAYMENT_BASES } from '../src/config/constants.js';
-import { calculateDistanceKm, evaluateLocationScore, computeJobMatch } from '../src/services/matchingService.js';
+import { calculateDistanceKm, calculateDistanceKmPrecise, evaluateLocationScore, computeJobMatch } from '../src/services/matchingService.js';
 import { seedAtigreKolhapurJobs } from '../scripts/seed_atigre_kolhapur_jobs.js';
 import { backupAndCleanupJobs } from '../scripts/backup_and_cleanup_jobs.js';
 
@@ -20,6 +20,10 @@ describe('Location-Based Job Discovery & Atigre/Kolhapur Test Suite', () => {
   let realJobId;
   let nycJobId;
   let missingCoordsJobId;
+  let radiusInsideJobId;
+  let radiusBoundaryJobId;
+  let radiusOutsideJobId;
+  let radiusBoundaryKm;
 
   const timestamp = Date.now();
 
@@ -156,6 +160,50 @@ describe('Location-Based Job Discovery & Atigre/Kolhapur Test Suite', () => {
     });
     missingCoordsJobId = missingCoordsJob._id.toString();
 
+    const origin = { lat: 16.741, lng: 74.372 };
+    const offsetLatitude = (distanceKm) => origin.lat + (distanceKm / 6371) * (180 / Math.PI);
+    const createRadiusFixture = (title, distanceKm) => {
+      const latitude = offsetLatitude(distanceKm);
+      return Job.create({
+        employer: realEmployerId,
+        title,
+        description: 'Known-coordinate radius regression fixture.',
+        category: 'Warehouse and packing',
+        requiredSkills: ['Produce Sorting'],
+        openings: 1,
+        locationName: `Radius fixture ${title}`,
+        locality: 'Radius Test Neighbor',
+        city: 'Radius Test City',
+        district: 'Radius Test District',
+        state: 'Radius Test State',
+        country: 'India',
+        location: { type: 'Point', coordinates: [origin.lng, latitude] },
+        workDate: new Date(Date.now() + 86400000),
+        startTime: '09:00',
+        endTime: '17:00',
+        totalHours: 7.5,
+        grossPay: 600,
+        currency: 'INR',
+        payBasis: PAYMENT_BASES.SHIFT,
+        status: JOB_STATUSES.OPEN,
+        isDemo: false
+      });
+    };
+    const [insideFixture, boundaryFixture, outsideFixture] = await Promise.all([
+      createRadiusFixture('Radius Inside 8 km', 8),
+      createRadiusFixture('Radius Boundary 10 km', 10),
+      createRadiusFixture('Radius Outside 15 km', 15)
+    ]);
+    radiusInsideJobId = insideFixture._id.toString();
+    radiusBoundaryJobId = boundaryFixture._id.toString();
+    radiusOutsideJobId = outsideFixture._id.toString();
+    radiusBoundaryKm = calculateDistanceKmPrecise(
+      origin.lat,
+      origin.lng,
+      boundaryFixture.location.coordinates[1],
+      boundaryFixture.location.coordinates[0]
+    );
+
     // 7. Seed local Atigre/Kolhapur demo jobs
     await seedAtigreKolhapurJobs({ verbose: false });
   }, 30000);
@@ -183,6 +231,92 @@ describe('Location-Based Job Discovery & Atigre/Kolhapur Test Suite', () => {
     // Should include Atigre, Hatkanangale, or Shiroli MIDC jobs (which are within 10 km)
     const localities = res.body.jobs.map(j => j.locality);
     expect(localities.some(l => ['Atigre', 'Hatkanangale', 'Shiroli MIDC'].includes(l))).toBe(true);
+  });
+
+  it('returns only jobs matching a typed locality and never broadens an unknown locality to all jobs', async () => {
+    const localRes = await request(app).get('/api/jobs?location=Atigre').expect(200);
+    expect(localRes.body.jobs.length).toBeGreaterThan(0);
+    for (const job of localRes.body.jobs) {
+      const locationText = [job.locality, job.city, job.district, job.state, job.locationName].filter(Boolean).join(' ');
+      expect(locationText).toMatch(/Atigre/i);
+    }
+
+    const unknownRes = await request(app).get('/api/jobs?location=UnrecognizedTownXYZ').expect(200);
+    expect(unknownRes.body.jobs).toEqual([]);
+    expect(unknownRes.body.total).toBe(0);
+
+    const compoundRes = await request(app).get('/api/jobs?location=Atigre%2C%20Kolhapur').expect(200);
+    expect(compoundRes.body.jobs.length).toBeGreaterThan(0);
+    for (const job of compoundRes.body.jobs) {
+      expect([job.locality, job.city, job.district, job.state].join(' ')).toMatch(/Atigre/i);
+      expect([job.locality, job.city, job.district, job.state].join(' ')).toMatch(/Kolhapur/i);
+    }
+  });
+
+  it('includes inside and boundary jobs, excludes outside jobs, and includes nearby jobs from another locality', async () => {
+    expect(radiusBoundaryKm).toBeCloseTo(10, 8);
+    const res = await request(app)
+      .get(`/api/jobs?locality=Atigre&lat=16.741&lng=74.372&maxDistanceKm=${radiusBoundaryKm}`)
+      .expect(200);
+    const ids = res.body.jobs.map((job) => job._id);
+    expect(ids).toContain(radiusInsideJobId);
+    expect(ids).toContain(radiusBoundaryJobId);
+    expect(ids).toContain(realJobId);
+    expect(ids).not.toContain(radiusOutsideJobId);
+    expect(ids).not.toContain(nycJobId);
+    expect(res.body.jobs.some((job) => job.isDemo)).toBe(true);
+    expect(res.body.jobs.find((job) => job._id === radiusInsideJobId).locality).toBe('Radius Test Neighbor');
+    for (const job of res.body.jobs) {
+      const [jobLng, jobLat] = job.location.coordinates;
+      expect(calculateDistanceKmPrecise(16.741, 74.372, jobLat, jobLng)).toBeLessThanOrEqual(radiusBoundaryKm);
+    }
+  });
+
+  it('updates results when radius changes and excludes jobs with unknown coordinates', async () => {
+    const withinTen = await request(app)
+      .get('/api/jobs?lat=16.741&lng=74.372&maxDistanceKm=10')
+      .expect(200);
+    const tenKmIds = withinTen.body.jobs.map((job) => job._id);
+    expect(tenKmIds).toContain(radiusInsideJobId);
+    expect(tenKmIds).toContain(radiusBoundaryJobId);
+    expect(tenKmIds).not.toContain(radiusOutsideJobId);
+    expect(tenKmIds).not.toContain(missingCoordsJobId);
+
+    const withinFive = await request(app)
+      .get('/api/jobs?lat=16.741&lng=74.372&maxDistanceKm=5')
+      .expect(200);
+    const fiveKmIds = withinFive.body.jobs.map((job) => job._id);
+    expect(fiveKmIds).not.toContain(radiusInsideJobId);
+    expect(fiveKmIds).not.toContain(radiusBoundaryJobId);
+    expect(fiveKmIds).not.toContain(radiusOutsideJobId);
+  });
+
+  it('rejects missing or invalid radius origins instead of returning all jobs', async () => {
+    const missingOrigin = await request(app).get('/api/jobs?maxDistanceKm=10').expect(400);
+    expect(missingOrigin.body.code).toBe('LOCATION_REQUIRED');
+
+    const partialOrigin = await request(app).get('/api/jobs?lat=16.741&maxDistanceKm=10').expect(400);
+    expect(partialOrigin.body.code).toBe('INVALID_LOCATION');
+
+    const invalidOrigin = await request(app).get('/api/jobs?lat=100&lng=74.372&maxDistanceKm=10').expect(400);
+    expect(invalidOrigin.body.code).toBe('INVALID_LOCATION');
+
+    const sentinelOrigin = await request(app).get('/api/jobs?lat=0&lng=0&maxDistanceKm=10').expect(400);
+    expect(sentinelOrigin.body.code).toBe('LOCATION_REQUIRED');
+  });
+
+  it('preserves category, keyword and pagination while applying exact location filters', async () => {
+    const firstPage = await request(app)
+      .get('/api/jobs?location=Atigre&category=Warehouse%20and%20packing&search=packing&page=1&limit=1')
+      .expect(200);
+    expect(firstPage.body.pagination.page).toBe(1);
+    expect(firstPage.body.pagination.limit).toBe(1);
+    expect(firstPage.body.jobs.length).toBeLessThanOrEqual(1);
+    for (const job of firstPage.body.jobs) {
+      expect(job.category).toBe('Warehouse and packing');
+      const locationText = [job.locality, job.city, job.district, job.state, job.locationName].filter(Boolean).join(' ');
+      expect(locationText).toMatch(/Atigre/i);
+    }
   });
 
   // Test 2: A New York job is excluded from Atigre radius-filtered results

@@ -27,6 +27,7 @@ import { EmptyState } from '../../components/common/EmptyState';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { JobMap } from '../../components/common/JobMap';
 import { formatPayWithBasis } from '../../utils/currency';
+import { buildJobSearchParams } from '../../utils/jobSearchParams.js';
 
 // Feature flag: set to true to restore the natural language AI conversational search banner
 const SHOW_AI_SEARCH_BANNER = false;
@@ -34,10 +35,11 @@ const SHOW_AI_SEARCH_BANNER = false;
 export const JobDiscoveryPage: React.FC = () => {
   const { user } = useAuth();
   const { success, error: toastError, info } = useToast();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [searchError, setSearchError] = useState<string>('');
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
 
   // Location & Presets
@@ -51,6 +53,12 @@ export const JobDiscoveryPage: React.FC = () => {
     { label: 'Kolhapur City', locality: 'Kolhapur', coords: [16.7050, 74.2430] as [number, number] }
   ];
 
+  const initialLocation = searchParams.get('location') || '';
+  const initialLocality = searchParams.get('locality') || '';
+  const initialPreset = LOCALITY_PRESETS.find(
+    (preset) => preset.locality.toLowerCase() === (initialLocality || initialLocation).toLowerCase()
+  );
+
   // Filter States
   const [search, setSearch] = useState<string>(searchParams.get('search') || '');
   const [category, setCategory] = useState<string>(searchParams.get('category') || '');
@@ -58,33 +66,36 @@ export const JobDiscoveryPage: React.FC = () => {
   const [workDate, setWorkDate] = useState<string>(searchParams.get('workDate') || '');
   const [maxDistanceKm, setMaxDistanceKm] = useState<string>(searchParams.get('maxDistanceKm') || '');
   const [sort, setSort] = useState<string>(searchParams.get('sort') || 'recent');
-  const [selectedLocality, setSelectedLocality] = useState<string>(searchParams.get('locality') || '');
-  const [userCoords, setUserCoords] = useState<[number, number] | null>(null);
+  const [selectedLocality, setSelectedLocality] = useState<string>(initialPreset?.locality || initialLocality);
+  const [locationQuery, setLocationQuery] = useState<string>(initialLocation && !initialPreset ? initialLocation : '');
+  const [userCoords, setUserCoords] = useState<[number, number] | null>(initialPreset?.coords || null);
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [nlQuery, setNlQuery] = useState<string>('');
   const [isNlSearching, setIsNlSearching] = useState<boolean>(false);
 
   const fetchJobs = async () => {
     setLoading(true);
+    setSearchError('');
     try {
-      const params = new URLSearchParams();
-      if (search) params.append('search', search);
-      if (category) params.append('category', category);
-      if (minPay) params.append('minPay', minPay);
-      if (workDate) params.append('workDate', workDate);
-      if (maxDistanceKm) params.append('maxDistanceKm', maxDistanceKm);
-      if (sort) params.append('sort', sort);
-      if (selectedLocality) params.append('locality', selectedLocality);
-      if (userCoords) {
-        params.append('lat', String(userCoords[0]));
-        params.append('lng', String(userCoords[1]));
-      }
+      const params = buildJobSearchParams({
+        search,
+        category,
+        minPay,
+        workDate,
+        maxDistanceKm,
+        sort,
+        location: locationQuery,
+        locality: selectedLocality,
+        coordinates: userCoords
+      });
 
       const res = await api.get(`/jobs?${params.toString()}`);
       if (res.data?.success) {
         setJobs(res.data.jobs || []);
       }
     } catch (err: any) {
+      setJobs([]);
+      setSearchError(err.message || 'Failed to load jobs. Please try again.');
       toastError(err.message || 'Failed to load jobs');
     } finally {
       setLoading(false);
@@ -140,6 +151,7 @@ export const JobDiscoveryPage: React.FC = () => {
         setIsLocating(false);
         setUserCoords([pos.coords.latitude, pos.coords.longitude]);
         setSelectedLocality('');
+        setLocationQuery('');
         info(`Location detected: ${pos.coords.latitude.toFixed(3)}, ${pos.coords.longitude.toFixed(3)}`);
       },
       (err) => {
@@ -266,6 +278,7 @@ export const JobDiscoveryPage: React.FC = () => {
                     setWorkDate('');
                     setMaxDistanceKm('');
                     setSelectedLocality('');
+                    setLocationQuery('');
                     setUserCoords(null);
                   }}
                   className="text-[11px] text-emerald-600 font-semibold hover:underline cursor-pointer"
@@ -295,6 +308,7 @@ export const JobDiscoveryPage: React.FC = () => {
                 onChange={(e) => {
                   const val = e.target.value;
                   setSelectedLocality(val);
+                  setLocationQuery('');
                   const preset = LOCALITY_PRESETS.find((p) => p.locality === val);
                   setUserCoords(preset?.coords || null);
                 }}
@@ -306,6 +320,36 @@ export const JobDiscoveryPage: React.FC = () => {
                   </option>
                 ))}
               </select>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const normalizedLocation = locationQuery.trim().toLowerCase();
+                  const matchingPreset = LOCALITY_PRESETS.find(
+                    (preset) => preset.locality.toLowerCase() === normalizedLocation
+                  );
+                  if (matchingPreset) {
+                    setSelectedLocality(matchingPreset.locality);
+                    setUserCoords(matchingPreset.coords);
+                  } else {
+                    fetchJobs();
+                  }
+                }}
+                className="mt-2 flex gap-2"
+              >
+                <input
+                  type="text"
+                  value={locationQuery}
+                  onChange={(event) => {
+                    setLocationQuery(event.target.value);
+                    setSelectedLocality('');
+                    setUserCoords(null);
+                  }}
+                  placeholder="Or enter a locality, city, or district"
+                  aria-label="Search locality, city, or district"
+                  className="w-full text-xs px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+                <Button type="submit" size="sm">Search</Button>
+              </form>
               {userCoords && (
                 <p className="text-[10px] text-slate-400 mt-1">
                   Active point: {userCoords[0].toFixed(3)}, {userCoords[1].toFixed(3)}
@@ -413,13 +457,21 @@ export const JobDiscoveryPage: React.FC = () => {
             <span className="font-medium text-slate-700">Verified Openings Only</span>
           </div>
 
+          {searchError && !loading && (
+            <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+              {searchError}
+            </div>
+          )}
+
           {loading ? (
             <LoadingSkeleton rows={4} />
-          ) : jobs.length === 0 ? (
+          ) : searchError ? null : jobs.length === 0 ? (
             <EmptyState
               icon={Search}
-              title="No temporary jobs matching your current filters"
-              description="No open shifts found for the selected area and radius. Try expanding your search radius to 25 km or 50 km, or selecting another locality."
+              title={locationQuery || selectedLocality || userCoords ? 'No jobs found near this location' : 'No temporary jobs matching your current filters'}
+              description={locationQuery || selectedLocality || userCoords
+                ? 'No open shifts match this location and your selected filters. Check the spelling or choose another location.'
+                : 'No open shifts found for the selected filters. Try expanding your search radius or selecting another locality.'}
               actionText="Expand Radius (50 km)"
               onAction={() => {
                 setMaxDistanceKm('50');
