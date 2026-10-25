@@ -118,9 +118,9 @@ export const AdminUsersPage: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {users.map((u: any) => (
                 <tr key={u._id || u.id} className="hover:bg-slate-50/50">
-                  <td className="px-5 py-3.5">
-                    <span className="font-bold text-slate-900 block">{u.name}</span>
-                    <span className="text-slate-400">{u.email}</span>
+                  <td className="px-5 py-3.5 max-w-[220px]">
+                    <span className="font-bold text-slate-900 block truncate" title={u.name}>{u.name}</span>
+                    <span className="text-slate-400 block truncate" title={u.email}>{u.email}</span>
                   </td>
                   <td className="px-5 py-3.5">
                     <Badge variant={u.role === 'worker' ? 'emerald' : u.role === 'employer' ? 'blue' : 'amber'} size="sm">

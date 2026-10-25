@@ -527,9 +527,9 @@ export const JobDiscoveryPage: React.FC = () => {
                       </p>
 
                       <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 pt-1">
-                        <div className="flex items-center gap-1.5">
-                          <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="font-medium text-slate-700">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="font-medium text-slate-700 truncate max-w-[180px] sm:max-w-xs" title={job.employerProfile?.businessName || job.employer?.name}>
                             {job.employerProfile?.businessName || job.employer?.name}
                           </span>
                         </div>

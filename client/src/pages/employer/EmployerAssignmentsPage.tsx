@@ -107,13 +107,13 @@ export const EmployerAssignmentsPage: React.FC = () => {
           {assignments.map((assign) => (
             <Card key={assign._id} className="p-6 space-y-4">
               <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                <div className="space-y-2 flex-1">
-                  <div className="flex items-center gap-2">
+                <div className="space-y-2 flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge variant={assign.status === 'COMPLETED' ? 'emerald' : 'blue'}>
                       {assign.status}
                     </Badge>
-                    <span className="text-xs font-bold text-slate-900">{assign.worker?.name}</span>
-                    <span className="text-xs text-slate-400">({assign.worker?.email})</span>
+                    <span className="text-xs font-bold text-slate-900 break-words">{assign.worker?.name}</span>
+                    <span className="text-xs text-slate-400 break-all">({assign.worker?.email})</span>
                   </div>
 
                   <h3 className="text-base font-bold text-slate-900">{assign.job?.title}</h3>

@@ -210,22 +210,23 @@ export const Navbar: React.FC = () => {
                 <div className="relative">
                   <button
                     onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                    className="flex items-center gap-2 p-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors text-left"
+                    className="flex items-center gap-2 p-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors text-left max-w-[170px] sm:max-w-[210px]"
+                    title={user.name}
                   >
-                    <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-semibold text-xs">
+                    <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-semibold text-xs shrink-0">
                       {user.name.charAt(0)}
                     </div>
-                    <span className="text-xs font-medium text-slate-800 max-w-[100px] truncate">{user.name}</span>
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="text-xs font-medium text-slate-800 truncate">{user.name}</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   </button>
 
                   {isUserMenuOpen && (
                     <div
-                      className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 z-50 animate-fade-in"
+                      className="absolute right-0 mt-2 w-52 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 z-50 animate-fade-in"
                       onClick={() => setIsUserMenuOpen(false)}
                     >
                       <div className="px-3 py-1.5 border-b border-slate-100">
-                        <p className="text-xs font-semibold text-slate-900 truncate">{user.name}</p>
+                        <p className="text-xs font-semibold text-slate-900 truncate" title={user.name}>{user.name}</p>
                         <p className="text-[11px] text-slate-500 capitalize">{user.role}</p>
                       </div>
 
@@ -327,8 +328,8 @@ export const Navbar: React.FC = () => {
           <div className="pt-3 border-t border-slate-100">
             {user ? (
               <div className="space-y-2">
-                <div className="text-xs font-semibold text-slate-500 uppercase">
-                  Logged in as {user.name} ({user.role})
+                <div className="text-xs font-semibold text-slate-500 uppercase break-words">
+                  Logged in as <span className="text-slate-800 normal-case font-bold">{user.name}</span> ({user.role})
                 </div>
                 {user.role === 'worker' && (
                   <Link

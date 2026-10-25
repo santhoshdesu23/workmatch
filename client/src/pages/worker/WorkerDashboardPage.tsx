@@ -95,24 +95,29 @@ export const WorkerDashboardPage: React.FC = () => {
       {/* Welcome Banner */}
       <Card className="p-6 bg-gradient-to-r from-emerald-600 to-teal-700 text-white border-0 shadow-md">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div className="space-y-1">
+          <div className="space-y-1 min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-xs uppercase tracking-wider font-semibold text-emerald-200">Worker Portal</span>
               {user?.verificationStatus === 'verified' && (
-                <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/30 text-white border border-emerald-400/40 font-semibold">
+                <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/30 text-white border border-emerald-400/40 font-semibold shrink-0">
                   <ShieldCheck className="w-3 h-3" /> Verified Worker
                 </span>
               )}
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Welcome back, {user?.name}
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight break-words">
+              <span className="sm:hidden">
+                Welcome back, {user?.firstName || (user?.name ? user.name.split(' ')[0] : 'Worker')}
+              </span>
+              <span className="hidden sm:inline">
+                Welcome back, {user?.name}
+              </span>
             </h1>
             <p className="text-xs text-emerald-100 max-w-lg">
               Explore local temporary shifts matching your preferences. You retain full freedom to apply or decline.
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <Link to="/worker/recommendations">
               <Button size="sm" className="bg-white text-emerald-800 hover:bg-emerald-50 shadow-none font-bold" leftIcon={<Sparkles className="w-4 h-4 text-emerald-600" />}>
                 View AI Matches
@@ -256,9 +261,11 @@ export const WorkerDashboardPage: React.FC = () => {
                       </Link>
 
                       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                        <div className="flex items-center gap-1">
-                          <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{job.employerProfile?.businessName || job.employer?.name}</span>
+                        <div className="flex items-center gap-1 min-w-0">
+                          <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="truncate max-w-[200px]" title={job.employerProfile?.businessName || job.employer?.name}>
+                            {job.employerProfile?.businessName || job.employer?.name}
+                          </span>
                         </div>
                         <div className="flex items-center gap-1">
                           <MapPin className="w-3.5 h-3.5 text-slate-400" />

@@ -65,12 +65,12 @@ export const AdminJobsPage: React.FC = () => {
           <Card key={job._id} className="p-5 space-y-3">
             <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
               <div className="space-y-1.5 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="emerald" size="sm">{job.category}</Badge>
                   <Badge variant={job.status === 'OPEN' ? 'blue' : 'slate'} size="sm">
                     {job.status}
                   </Badge>
-                  <span className="text-xs text-slate-400 font-medium">
+                  <span className="text-xs text-slate-400 font-medium break-words">
                     Employer: {job.employer?.name} ({job.employer?.email})
                   </span>
                 </div>

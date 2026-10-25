@@ -4,6 +4,16 @@ import { ROLES } from '../config/constants.js';
 
 const userSchema = new mongoose.Schema(
   {
+    firstName: {
+      type: String,
+      trim: true,
+      maxlength: [30, 'First name cannot exceed 30 characters']
+    },
+    lastName: {
+      type: String,
+      trim: true,
+      maxlength: [30, 'Last name cannot exceed 30 characters']
+    },
     name: {
       type: String,
       required: [true, 'Name is required'],
@@ -72,6 +82,31 @@ const userSchema = new mongoose.Schema(
     timestamps: true
   }
 );
+
+userSchema.pre('validate', function (next) {
+  // If firstName or lastName are provided, trim and synchronize name
+  if (this.firstName || this.lastName) {
+    const first = (this.firstName || '').trim();
+    const last = (this.lastName || '').trim();
+    this.firstName = first;
+    this.lastName = last;
+    if (!this.name || this.isModified('firstName') || this.isModified('lastName')) {
+      this.name = [first, last].filter(Boolean).join(' ');
+    }
+  } else if (this.name) {
+    // If only legacy full name is provided, derive firstName and lastName
+    const trimmed = this.name.trim();
+    this.name = trimmed;
+    const parts = trimmed.split(/\s+/);
+    if (!this.firstName) {
+      this.firstName = parts[0]?.slice(0, 30) || '';
+    }
+    if (!this.lastName) {
+      this.lastName = parts.slice(1).join(' ')?.slice(0, 30) || parts[0]?.slice(0, 30) || '';
+    }
+  }
+  next();
+});
 
 userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.passwordHash);

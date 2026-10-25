@@ -6,6 +6,8 @@ import { useToast } from '../../context/ToastContext';
 import { Role } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
+import { NameInputField } from '../../components/common/NameInputField';
+import { validateName } from '../../utils/nameValidation';
 
 export const RegisterPage: React.FC = () => {
   const { register } = useAuth();
@@ -15,7 +17,8 @@ export const RegisterPage: React.FC = () => {
 
   const initialRole = (searchParams.get('role') as Role) || 'worker';
   const [role, setRole] = useState<Role>(initialRole);
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [businessName, setBusinessName] = useState('');
@@ -23,9 +26,54 @@ export const RegisterPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [formError, setFormError] = useState<{ message: string; isConflict?: boolean } | null>(null);
 
+  const [fieldErrors, setFieldErrors] = useState<{ firstName?: string | null; lastName?: string | null }>({});
+  const [touched, setTouched] = useState<{ firstName?: boolean; lastName?: boolean }>({});
+
+  const handleFirstNameChange = (val: string) => {
+    setFirstName(val);
+    if (touched.firstName) {
+      const res = validateName(val, 'First name');
+      setFieldErrors((prev) => ({ ...prev, firstName: res.error }));
+    }
+  };
+
+  const handleFirstNameBlur = () => {
+    setTouched((prev) => ({ ...prev, firstName: true }));
+    const res = validateName(firstName, 'First name');
+    setFieldErrors((prev) => ({ ...prev, firstName: res.error }));
+  };
+
+  const handleLastNameChange = (val: string) => {
+    setLastName(val);
+    if (touched.lastName) {
+      const res = validateName(val, 'Last name');
+      setFieldErrors((prev) => ({ ...prev, lastName: res.error }));
+    }
+  };
+
+  const handleLastNameBlur = () => {
+    setTouched((prev) => ({ ...prev, lastName: true }));
+    const res = validateName(lastName, 'Last name');
+    setFieldErrors((prev) => ({ ...prev, lastName: res.error }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+
+    // Validate both name fields independently before submission
+    const firstRes = validateName(firstName, 'First name');
+    const lastRes = validateName(lastName, 'Last name');
+
+    setTouched({ firstName: true, lastName: true });
+    setFieldErrors({
+      firstName: firstRes.error,
+      lastName: lastRes.error
+    });
+
+    if (!firstRes.isValid || !lastRes.isValid) {
+      return;
+    }
 
     if (!agreedToTerms) {
       toastError('You must agree to the Terms of Service and Voluntary Marketplace Principles.');
@@ -34,8 +82,12 @@ export const RegisterPage: React.FC = () => {
 
     setIsLoading(true);
     try {
+      const trimmedFirst = firstName.trim();
+      const trimmedLast = lastName.trim();
       const user = await register({
-        name,
+        firstName: trimmedFirst,
+        lastName: trimmedLast,
+        name: `${trimmedFirst} ${trimmedLast}`,
         email,
         password,
         role,
@@ -103,24 +155,34 @@ export const RegisterPage: React.FC = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="register-name" className="block text-xs font-semibold text-slate-700 mb-1.5">
-              {role === 'employer' ? 'Contact Representative Name' : 'Full Legal Name'}
-            </label>
-            <div className="relative">
-              <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-              <input
-                id="register-name"
-                name="name"
-                type="text"
-                autoComplete="name"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Alex Rivera"
-                className="w-full text-xs pl-10 pr-3.5 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              />
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <NameInputField
+              id="register-first-name"
+              name="firstName"
+              label={role === 'employer' ? 'Representative First Name' : 'First Name'}
+              value={firstName}
+              onChange={handleFirstNameChange}
+              onBlur={handleFirstNameBlur}
+              error={fieldErrors.firstName}
+              placeholder="e.g. Alex"
+              autoComplete="given-name"
+              required
+              icon={<User className="w-4 h-4 text-slate-400" />}
+            />
+
+            <NameInputField
+              id="register-last-name"
+              name="lastName"
+              label={role === 'employer' ? 'Representative Last Name' : 'Last Name'}
+              value={lastName}
+              onChange={handleLastNameChange}
+              onBlur={handleLastNameBlur}
+              error={fieldErrors.lastName}
+              placeholder="e.g. Rivera"
+              autoComplete="family-name"
+              required
+              icon={<User className="w-4 h-4 text-slate-400" />}
+            />
           </div>
 
           {role === 'employer' && (

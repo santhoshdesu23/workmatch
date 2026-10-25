@@ -7,6 +7,7 @@ import { VerificationRequest } from '../models/VerificationRequest.js';
 import { ROLES } from '../config/constants.js';
 import { signToken } from '../config/jwt.js';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../services/emailService.js';
+import { validateNameField } from '../utils/nameValidator.js';
 
 const ALLOWED_REGISTRATION_ROLES = [ROLES.WORKER, ROLES.EMPLOYER];
 
@@ -28,12 +29,59 @@ function validatePasswordStrength(password) {
 
 export const register = async (req, res, next) => {
   try {
-    const { name, email, password, role, businessName } = req.body;
+    const { firstName, lastName, name, email, password, role, businessName } = req.body;
 
-    if (!name || !email || !password || !role) {
+    if (!email || !password || !role) {
       return res.status(400).json({
         success: false,
-        message: 'Name, email, password, and role are required.'
+        message: 'Email, password, and role are required.'
+      });
+    }
+
+    let trimmedFirst = '';
+    let trimmedLast = '';
+    let finalName = '';
+
+    if (firstName !== undefined || lastName !== undefined) {
+      if (!firstName || !lastName) {
+        return res.status(400).json({
+          success: false,
+          message: 'Both first name and last name are required.'
+        });
+      }
+      const firstError = validateNameField(firstName, 'First name');
+      if (firstError) {
+        return res.status(400).json({ success: false, message: firstError });
+      }
+      const lastError = validateNameField(lastName, 'Last name');
+      if (lastError) {
+        return res.status(400).json({ success: false, message: lastError });
+      }
+      trimmedFirst = firstName.trim();
+      trimmedLast = lastName.trim();
+      finalName = `${trimmedFirst} ${trimmedLast}`;
+    } else if (name !== undefined) {
+      if (!name || typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Name is required.'
+        });
+      }
+      const trimmed = name.trim();
+      if (trimmed.length > 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Name cannot exceed 100 characters.'
+        });
+      }
+      finalName = trimmed;
+      const parts = trimmed.split(/\s+/);
+      trimmedFirst = parts[0]?.slice(0, 30) || '';
+      trimmedLast = parts.slice(1).join(' ')?.slice(0, 30) || trimmedFirst;
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'First name and last name are required.'
       });
     }
 
@@ -71,7 +119,9 @@ export const register = async (req, res, next) => {
     const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     const user = await User.create({
-      name: name.trim(),
+      firstName: trimmedFirst,
+      lastName: trimmedLast,
+      name: finalName,
       email: normalizedEmail,
       passwordHash,
       role,
@@ -123,6 +173,8 @@ export const register = async (req, res, next) => {
       user: {
         id: user._id,
         name: user.name,
+        firstName: user.firstName || (user.name ? user.name.split(/\s+/)[0] : ''),
+        lastName: user.lastName || (user.name ? user.name.split(/\s+/).slice(1).join(' ') : ''),
         email: user.email,
         role: user.role,
         emailVerified: user.emailVerified,
@@ -192,6 +244,10 @@ export const login = async (req, res, next) => {
 
     const token = signToken({ id: user._id, role: user.role, tokenVersion: user.tokenVersion || 0 });
 
+    const nameParts = (user.name || '').trim().split(/\s+/);
+    const firstName = user.firstName || nameParts[0] || '';
+    const lastName = user.lastName || nameParts.slice(1).join(' ') || '';
+
     res.status(200).json({
       success: true,
       message: 'Logged in successfully.',
@@ -199,6 +255,8 @@ export const login = async (req, res, next) => {
       user: {
         id: user._id,
         name: user.name,
+        firstName,
+        lastName,
         email: user.email,
         role: user.role,
         emailVerified: user.emailVerified,
@@ -222,11 +280,17 @@ export const getMe = async (req, res, next) => {
       profile = await EmployerProfile.findOne({ user: user._id });
     }
 
+    const nameParts = (user.name || '').trim().split(/\s+/);
+    const firstName = user.firstName || nameParts[0] || '';
+    const lastName = user.lastName || nameParts.slice(1).join(' ') || '';
+
     res.status(200).json({
       success: true,
       user: {
         id: user._id,
         name: user.name,
+        firstName,
+        lastName,
         email: user.email,
         role: user.role,
         emailVerified: user.emailVerified,

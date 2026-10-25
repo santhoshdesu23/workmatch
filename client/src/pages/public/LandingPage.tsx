@@ -783,8 +783,13 @@ export const LandingPage: React.FC = () => {
           {user ? (
             user.role === 'worker' ? (
               <>
-                <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
-                  Welcome back, {user.name}!
+                <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight break-words max-w-2xl mx-auto">
+                  <span className="sm:hidden">
+                    Welcome back, {user.firstName || user.name.split(' ')[0]}!
+                  </span>
+                  <span className="hidden sm:inline">
+                    Welcome back, {user.name}!
+                  </span>
                 </h2>
                 <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto leading-relaxed">
                   Explore new shifts matching your skills, manage your applications, and track your active shift schedules.

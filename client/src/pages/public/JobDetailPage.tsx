@@ -291,9 +291,9 @@ export const JobDetailPage: React.FC = () => {
               {job.title}
             </h1>
 
-            <div className="flex items-center gap-2 text-sm text-slate-600">
-              <Building2 className="w-4 h-4 text-slate-400" />
-              <span className="font-semibold text-slate-800">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+              <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+              <span className="font-semibold text-slate-800 break-words" title={job.employerProfile?.businessName || job.employer?.name}>
                 {job.employerProfile?.businessName || job.employer?.name}
               </span>
               {job.employerProfile?.rating && (

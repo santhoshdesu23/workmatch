@@ -59,14 +59,14 @@ export const WorkerReviewsPage: React.FC = () => {
         <div className="space-y-3">
           {reviews.map((r) => (
             <Card key={r._id} className="p-5 space-y-2">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-xs text-slate-900">{r.reviewer?.name}</span>
-                  <span className="text-[11px] text-slate-400">
+              <div className="flex justify-between items-center gap-3">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span className="font-bold text-xs text-slate-900 truncate" title={r.reviewer?.name}>{r.reviewer?.name}</span>
+                  <span className="text-[11px] text-slate-400 shrink-0">
                     {new Date(r.createdAt).toLocaleDateString()}
                   </span>
                 </div>
-                <div className="text-amber-500 font-bold text-xs">
+                <div className="text-amber-500 font-bold text-xs shrink-0">
                   {'★'.repeat(r.rating)}
                   <span className="text-slate-300">{'★'.repeat(5 - r.rating)}</span>
                 </div>

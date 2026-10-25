@@ -99,7 +99,7 @@ export const AdminVerificationsPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <h3 className="text-sm font-bold text-slate-900">
+                  <h3 className="text-sm font-bold text-slate-900 break-words">
                     {v.user?.name} ({v.user?.email}) • Role: {v.user?.role}
                   </h3>
 

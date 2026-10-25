@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, MapPin, Phone, Mail, Globe, ShieldCheck, Save, Navigation } from 'lucide-react';
+import { Building2, MapPin, Phone, Mail, Globe, ShieldCheck, Save, Navigation, User } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -9,6 +9,8 @@ import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { AccountDeletionSection } from '../../components/common/AccountDeletionSection';
+import { NameInputField } from '../../components/common/NameInputField';
+import { validateName } from '../../utils/nameValidation';
 
 export const EmployerProfilePage: React.FC = () => {
   const { user, refreshUser } = useAuth();
@@ -17,6 +19,9 @@ export const EmployerProfilePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [nameErrors, setNameErrors] = useState<{ firstName?: string | null; lastName?: string | null }>({});
   const [businessName, setBusinessName] = useState('');
   const [description, setDescription] = useState('');
   const [businessCategory, setBusinessCategory] = useState('');
@@ -33,6 +38,17 @@ export const EmployerProfilePage: React.FC = () => {
         const res = await api.get('/employers/me');
         if (res.data?.success && res.data?.profile) {
           const p: EmployerProfile = res.data.profile;
+          const u = res.data.user || user;
+          if (u) {
+            if (u.firstName && u.lastName) {
+              setFirstName(u.firstName);
+              setLastName(u.lastName);
+            } else if (u.name) {
+              const parts = u.name.trim().split(/\s+/);
+              setFirstName(parts[0] || '');
+              setLastName(parts.slice(1).join(' ') || '');
+            }
+          }
           setBusinessName(p.businessName || '');
           setDescription(p.description || '');
           setBusinessCategory(p.businessCategory || 'Event and Hospitality Logistics');
@@ -50,7 +66,7 @@ export const EmployerProfilePage: React.FC = () => {
     };
 
     fetchProfile();
-  }, []);
+  }, [user]);
 
   const handleUseBrowserGPS = () => {
     if (!navigator.geolocation) {
@@ -68,9 +84,29 @@ export const EmployerProfilePage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const firstRes = validateName(firstName, 'Representative first name');
+    const lastRes = validateName(lastName, 'Representative last name');
+
+    setNameErrors({
+      firstName: firstRes.error,
+      lastName: lastRes.error
+    });
+
+    if (!firstRes.isValid || !lastRes.isValid) {
+      toastError(firstRes.error || lastRes.error || 'Please correct representative name fields before saving.');
+      return;
+    }
+
     setSaving(true);
     try {
+      const trimmedFirst = firstName.trim();
+      const trimmedLast = lastName.trim();
+
       await api.patch('/employers/me', {
+        firstName: trimmedFirst,
+        lastName: trimmedLast,
+        name: `${trimmedFirst} ${trimmedLast}`,
         businessName,
         description,
         businessCategory,
@@ -114,6 +150,50 @@ export const EmployerProfilePage: React.FC = () => {
           <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider pb-2 border-b border-slate-100">
             Company Overview
           </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <NameInputField
+              id="employer-first-name"
+              name="firstName"
+              label="Representative First Name"
+              value={firstName}
+              onChange={(val) => {
+                setFirstName(val);
+                if (nameErrors.firstName) {
+                  setNameErrors((prev) => ({ ...prev, firstName: validateName(val, 'Representative first name').error }));
+                }
+              }}
+              onBlur={() => {
+                setNameErrors((prev) => ({ ...prev, firstName: validateName(firstName, 'Representative first name').error }));
+              }}
+              error={nameErrors.firstName}
+              placeholder="e.g. Marcus"
+              autoComplete="given-name"
+              required
+              icon={<User className="w-4 h-4 text-slate-400" />}
+            />
+
+            <NameInputField
+              id="employer-last-name"
+              name="lastName"
+              label="Representative Last Name"
+              value={lastName}
+              onChange={(val) => {
+                setLastName(val);
+                if (nameErrors.lastName) {
+                  setNameErrors((prev) => ({ ...prev, lastName: validateName(val, 'Representative last name').error }));
+                }
+              }}
+              onBlur={() => {
+                setNameErrors((prev) => ({ ...prev, lastName: validateName(lastName, 'Representative last name').error }));
+              }}
+              error={nameErrors.lastName}
+              placeholder="e.g. Vance"
+              autoComplete="family-name"
+              required
+              icon={<User className="w-4 h-4 text-slate-400" />}
+            />
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>

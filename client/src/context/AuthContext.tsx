@@ -3,7 +3,9 @@ import api from '../api/client';
 import { User, Role } from '../types';
 
 interface RegisterData {
-  name: string;
+  firstName?: string;
+  lastName?: string;
+  name?: string;
   email: string;
   password: string;
   role: Role;

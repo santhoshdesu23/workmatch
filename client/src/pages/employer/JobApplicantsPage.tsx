@@ -168,8 +168,8 @@ export const JobApplicantsPage: React.FC = () => {
                     )}
                   </div>
 
-                  <h3 className="text-base font-bold text-slate-900">{app.worker?.name}</h3>
-                  <div className="text-xs text-slate-500">{app.worker?.email}</div>
+                  <h3 className="text-base font-bold text-slate-900 break-words">{app.worker?.name}</h3>
+                  <div className="text-xs text-slate-500 break-all">{app.worker?.email}</div>
 
                   {/* Worker bio & skills */}
                   {app.workerProfile?.bio && (

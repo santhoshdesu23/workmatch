@@ -100,11 +100,13 @@ export const EmployerPaymentsPage: React.FC = () => {
               <Card key={p._id} className="p-6 space-y-3">
                 <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
                   <div className="space-y-1 flex-1">
-                    <div className="flex items-center gap-2">
-                      <Badge variant={p.status === 'PAID' ? 'emerald' : 'amber'}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Badge variant={p.status === 'PAID' ? 'emerald' : 'amber'} className="shrink-0">
                         {p.status}
                       </Badge>
-                      <span className="text-xs text-slate-400">Worker: {p.worker?.name}</span>
+                      <span className="text-xs text-slate-500 font-medium truncate max-w-[200px] sm:max-w-xs" title={p.worker?.name}>
+                        Worker: <span className="font-semibold text-slate-800">{p.worker?.name}</span>
+                      </span>
                     </div>
 
                     <h3 className="text-base font-bold text-slate-900">{jobTitle}</h3>

@@ -1,6 +1,7 @@
 import { WorkerProfile } from '../models/WorkerProfile.js';
 import { Job } from '../models/Job.js';
 import { User } from '../models/User.js';
+import { validateNameField } from '../utils/nameValidator.js';
 
 export const getMyWorkerProfile = async (req, res, next) => {
   try {
@@ -9,12 +10,18 @@ export const getMyWorkerProfile = async (req, res, next) => {
       profile = await WorkerProfile.create({ user: req.user._id });
     }
 
+    const nameParts = (req.user.name || '').trim().split(/\s+/);
+    const firstName = req.user.firstName || nameParts[0] || '';
+    const lastName = req.user.lastName || nameParts.slice(1).join(' ') || '';
+
     res.status(200).json({
       success: true,
       profile,
       user: {
         id: req.user._id,
         name: req.user.name,
+        firstName,
+        lastName,
         email: req.user.email,
         emailVerified: req.user.emailVerified,
         verificationStatus: req.user.verificationStatus
@@ -28,6 +35,8 @@ export const getMyWorkerProfile = async (req, res, next) => {
 export const updateMyWorkerProfile = async (req, res, next) => {
   try {
     const {
+      firstName,
+      lastName,
       name,
       bio,
       skills,
@@ -40,8 +49,49 @@ export const updateMyWorkerProfile = async (req, res, next) => {
       languages
     } = req.body;
 
-    if (name && name.trim()) {
-      await User.findByIdAndUpdate(req.user._id, { name: name.trim() });
+    if (firstName !== undefined || lastName !== undefined) {
+      if (firstName !== undefined) {
+        const firstError = validateNameField(firstName, 'First name');
+        if (firstError) {
+          return res.status(400).json({ success: false, message: firstError });
+        }
+      }
+      if (lastName !== undefined) {
+        const lastError = validateNameField(lastName, 'Last name');
+        if (lastError) {
+          return res.status(400).json({ success: false, message: lastError });
+        }
+      }
+
+      const currentUser = await User.findById(req.user._id);
+      const currentFirst = currentUser.firstName || (currentUser.name ? currentUser.name.split(/\s+/)[0] : '');
+      const currentLast = currentUser.lastName || (currentUser.name ? currentUser.name.split(/\s+/).slice(1).join(' ') : '');
+
+      const newFirst = firstName !== undefined ? firstName.trim() : currentFirst;
+      const newLast = lastName !== undefined ? lastName.trim() : currentLast;
+      const finalName = `${newFirst} ${newLast}`.trim();
+
+      await User.findByIdAndUpdate(req.user._id, {
+        firstName: newFirst,
+        lastName: newLast,
+        name: finalName
+      });
+    } else if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ success: false, message: 'Name cannot be empty.' });
+      }
+      const trimmed = name.trim();
+      if (trimmed.length > 100) {
+        return res.status(400).json({ success: false, message: 'Name cannot exceed 100 characters.' });
+      }
+      const parts = trimmed.split(/\s+/);
+      const first = parts[0]?.slice(0, 30) || '';
+      const last = parts.slice(1).join(' ')?.slice(0, 30) || '';
+      await User.findByIdAndUpdate(req.user._id, {
+        name: trimmed,
+        firstName: first,
+        lastName: last
+      });
     }
 
     const updates = {};

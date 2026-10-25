@@ -20,6 +20,8 @@ import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { AccountDeletionSection } from '../../components/common/AccountDeletionSection';
+import { NameInputField } from '../../components/common/NameInputField';
+import { validateName } from '../../utils/nameValidation';
 
 export const WorkerProfilePage: React.FC = () => {
   const { user, refreshUser } = useAuth();
@@ -29,7 +31,9 @@ export const WorkerProfilePage: React.FC = () => {
   const [saving, setSaving] = useState(false);
 
   // Form states
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [nameErrors, setNameErrors] = useState<{ firstName?: string | null; lastName?: string | null }>({});
   const [bio, setBio] = useState('');
   const [skills, setSkills] = useState<string[]>([]);
   const [newSkillInput, setNewSkillInput] = useState('');
@@ -69,7 +73,17 @@ export const WorkerProfilePage: React.FC = () => {
         const res = await api.get('/workers/me');
         if (res.data?.success && res.data?.profile) {
           const p: WorkerProfile = res.data.profile;
-          setName(res.data.user?.name || user?.name || '');
+          const u = res.data.user || user;
+          if (u) {
+            if (u.firstName && u.lastName) {
+              setFirstName(u.firstName);
+              setLastName(u.lastName);
+            } else if (u.name) {
+              const parts = u.name.trim().split(/\s+/);
+              setFirstName(parts[0] || '');
+              setLastName(parts.slice(1).join(' ') || '');
+            }
+          }
           setBio(p.bio || '');
           setSkills(p.skills || []);
           setExperienceSummary(p.experienceSummary || '');
@@ -155,10 +169,29 @@ export const WorkerProfilePage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const firstRes = validateName(firstName, 'First name');
+    const lastRes = validateName(lastName, 'Last name');
+
+    setNameErrors({
+      firstName: firstRes.error,
+      lastName: lastRes.error
+    });
+
+    if (!firstRes.isValid || !lastRes.isValid) {
+      toastError(firstRes.error || lastRes.error || 'Please correct name fields before saving.');
+      return;
+    }
+
     setSaving(true);
     try {
+      const trimmedFirst = firstName.trim();
+      const trimmedLast = lastName.trim();
+
       await api.patch('/workers/me', {
-        name,
+        firstName: trimmedFirst,
+        lastName: trimmedLast,
+        name: `${trimmedFirst} ${trimmedLast}`,
         bio,
         skills,
         experienceSummary,
@@ -234,26 +267,57 @@ export const WorkerProfilePage: React.FC = () => {
           </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Full Name</label>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              />
-            </div>
+            <NameInputField
+              id="worker-first-name"
+              name="firstName"
+              label="First Name"
+              value={firstName}
+              onChange={(val) => {
+                setFirstName(val);
+                if (nameErrors.firstName) {
+                  setNameErrors((prev) => ({ ...prev, firstName: validateName(val, 'First name').error }));
+                }
+              }}
+              onBlur={() => {
+                setNameErrors((prev) => ({ ...prev, firstName: validateName(firstName, 'First name').error }));
+              }}
+              error={nameErrors.firstName}
+              placeholder="e.g. Alex"
+              autoComplete="given-name"
+              required
+              icon={<User className="w-4 h-4 text-slate-400" />}
+            />
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Email Address</label>
-              <input
-                type="email"
-                disabled
-                value={user?.email || ''}
-                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-500 cursor-not-allowed"
-              />
-            </div>
+            <NameInputField
+              id="worker-last-name"
+              name="lastName"
+              label="Last Name"
+              value={lastName}
+              onChange={(val) => {
+                setLastName(val);
+                if (nameErrors.lastName) {
+                  setNameErrors((prev) => ({ ...prev, lastName: validateName(val, 'Last name').error }));
+                }
+              }}
+              onBlur={() => {
+                setNameErrors((prev) => ({ ...prev, lastName: validateName(lastName, 'Last name').error }));
+              }}
+              error={nameErrors.lastName}
+              placeholder="e.g. Rivera"
+              autoComplete="family-name"
+              required
+              icon={<User className="w-4 h-4 text-slate-400" />}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Email Address (Read-only)</label>
+            <input
+              type="email"
+              disabled
+              value={user?.email || ''}
+              className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-slate-50 text-slate-500 cursor-not-allowed"
+            />
           </div>
 
           <div>

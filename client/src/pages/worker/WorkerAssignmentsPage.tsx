@@ -126,8 +126,8 @@ export const WorkerAssignmentsPage: React.FC = () => {
                     >
                       {assign.status}
                     </Badge>
-                    <span className="text-xs text-slate-500 font-medium">
-                      Employer: {assign.employer?.name}
+                    <span className="text-xs text-slate-500 font-medium break-words">
+                      Employer: <span className="font-semibold text-slate-800">{assign.employer?.name}</span>
                     </span>
                   </div>
 

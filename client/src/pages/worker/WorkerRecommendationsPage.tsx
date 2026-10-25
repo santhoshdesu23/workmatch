@@ -167,9 +167,9 @@ export const WorkerRecommendationsPage: React.FC = () => {
                     </h3>
                   </Link>
 
-                  <div className="flex items-center gap-2 text-xs text-slate-600">
-                    <Building2 className="w-4 h-4 text-slate-400" />
-                    <span className="font-semibold text-slate-800">
+                  <div className="flex items-center gap-2 text-xs text-slate-600 min-w-0">
+                    <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="font-semibold text-slate-800 truncate max-w-[200px] sm:max-w-md" title={job.employerProfile?.businessName || job.employer?.name}>
                       {job.employerProfile?.businessName || job.employer?.name}
                     </span>
                   </div>

@@ -145,10 +145,10 @@ export const WorkerPaymentsPage: React.FC = () => {
                       )}
                     </div>
 
-                    <h3 className="text-base font-bold text-slate-900">{jobTitle}</h3>
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                      <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Employer: {p.employer?.name}</span>
+                    <h3 className="text-base font-bold text-slate-900 break-words">{jobTitle}</h3>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 min-w-0">
+                      <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="truncate max-w-[200px] sm:max-w-xs" title={p.employer?.name}>Employer: {p.employer?.name}</span>
                     </div>
                   </div>
 

@@ -62,24 +62,29 @@ export const EmployerDashboardPage: React.FC = () => {
       {/* Header Banner */}
       <Card className="p-6 bg-gradient-to-r from-slate-900 to-slate-800 text-white border-0 shadow-md">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div className="space-y-1">
+          <div className="space-y-1 min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-xs uppercase tracking-wider font-semibold text-emerald-400">Employer Management</span>
               {user?.verificationStatus === 'verified' && (
-                <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">
+                <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold shrink-0">
                   <ShieldCheck className="w-3 h-3" /> Verified Business
                 </span>
               )}
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              {user?.name}'s Operations
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight break-words">
+              <span className="sm:hidden">
+                {user?.firstName || (user?.name ? user.name.split(' ')[0] : 'Employer')}'s Operations
+              </span>
+              <span className="hidden sm:inline">
+                {user?.name}'s Operations
+              </span>
             </h1>
             <p className="text-xs text-slate-300 max-w-lg">
               Manage temporary postings, candidate applications, shift attendance, and recorded compensation.
             </p>
           </div>
 
-          <Link to="/employer/jobs/create">
+          <Link to="/employer/jobs/create" className="shrink-0">
             <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" leftIcon={<PlusCircle className="w-4 h-4" />}>
               Post New Shift
             </Button>
@@ -165,10 +170,12 @@ export const EmployerDashboardPage: React.FC = () => {
               const jobTitle = typeof app.job === 'object' ? app.job?.title : 'Shift';
               return (
                 <div key={app._id} className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                  <div className="space-y-1">
+                  <div className="space-y-1 min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-xs text-slate-900">{app.worker?.name}</span>
-                      <Badge variant="blue" size="sm">{app.status}</Badge>
+                      <span className="font-bold text-xs text-slate-900 truncate max-w-[200px] sm:max-w-xs" title={app.worker?.name}>
+                        {app.worker?.name}
+                      </span>
+                      <Badge variant="blue" size="sm" className="shrink-0">{app.status}</Badge>
                     </div>
                     <p className="text-xs text-slate-600">Applied for: <span className="font-medium">{jobTitle}</span></p>
                     <span className="text-[10px] text-slate-400">
