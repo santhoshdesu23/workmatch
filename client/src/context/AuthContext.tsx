@@ -10,6 +10,7 @@ interface RegisterData {
   password: string;
   role: Role;
   businessName?: string;
+  verificationToken?: string;
 }
 
 interface AuthContextType {

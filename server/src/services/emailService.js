@@ -493,3 +493,122 @@ export async function sendVerificationEmail({ to, verificationToken, userName = 
   }
 }
 
+/**
+ * Dispatches a 4-digit verification OTP code to the recipient email address.
+ * Reuses the existing Brevo, Resend, or test mock integrations.
+ *
+ * @param {object} params
+ * @param {string} params.to - Recipient email address
+ * @param {string} params.otp - 4-digit numeric string (0000-9999)
+ * @param {string} [params.userName] - Recipient display name
+ * @returns {Promise<{ success: boolean, messageId?: string, error?: string }>}
+ */
+export async function sendVerificationOtpEmail({ to, otp, userName = 'WorkMatch User' }) {
+  if (!to || !otp) {
+    return { success: false, error: 'Recipient email and verification OTP are required.' };
+  }
+
+  const isTest = process.env.NODE_ENV === 'test';
+  const isProduction = process.env.NODE_ENV === 'production';
+  const emailProvider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
+
+  const sender = resolveSender(emailProvider);
+  const senderEmail = sender.formatted;
+
+  const subject = 'WorkMatch — Your 4-Digit Verification Code';
+  const textContent = `Hello ${userName},\n\nYour WorkMatch verification code is: ${otp}\n\nThis 4-digit code will expire in 5 minutes. Enter this code on the registration page to verify your email address.\n\nIf you did not request this verification code, please ignore this email.\n\n— The WorkMatch Security Team`;
+  const htmlContent = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #ffffff;">
+      <div style="border-bottom: 2px solid #059669; padding-bottom: 12px; margin-bottom: 20px;">
+        <h1 style="color: #0f172a; font-size: 20px; margin: 0; font-weight: 700;">WorkMatch Security</h1>
+      </div>
+      <h2 style="color: #0f172a; font-size: 17px; margin-top: 0;">Verify Your Email Address</h2>
+      <p style="color: #334155; font-size: 15px; line-height: 1.5;">Hello ${userName},</p>
+      <p style="color: #334155; font-size: 15px; line-height: 1.5;">Thank you for registering on WorkMatch. Please use the following 4-digit verification code to confirm your email address:</p>
+      <div style="text-align: center; margin: 28px 0;">
+        <div style="display: inline-block; background-color: #f0fdf4; border: 2px dashed #059669; padding: 14px 32px; border-radius: 8px; font-size: 32px; font-weight: 700; letter-spacing: 8px; color: #065f46;">
+          ${otp}
+        </div>
+      </div>
+      <p style="color: #64748b; font-size: 13px; line-height: 1.4; text-align: center;">This code will expire in <strong>5 minutes</strong>.</p>
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+      <p style="color: #94a3b8; font-size: 12px; margin-bottom: 0;">If you did not request this verification code, you can safely ignore this email.</p>
+    </div>
+  `;
+
+  // 1. Strict Production Guard
+  if (isProduction && emailProvider !== 'resend' && emailProvider !== 'brevo') {
+    const errorMsg = 'Mock email provider is prohibited in production.';
+    console.error(`[EmailService] Security violation: ${errorMsg}`);
+    return { success: false, error: errorMsg };
+  }
+
+  // 2. Brevo HTTP REST API Dispatch
+  if (emailProvider === 'brevo') {
+    return await sendViaBrevo({
+      to,
+      senderName: sender.name,
+      senderEmail: sender.email,
+      subject,
+      htmlContent,
+      textContent,
+      userName
+    });
+  }
+
+  // 3. Mock Transport
+  if (emailProvider === 'mock' || (isTest && emailProvider !== 'resend') || (!isProduction && emailProvider !== 'resend' && !process.env.RESEND_API_KEY && !customResendClient)) {
+    if (mockFailureEnabled) {
+      console.error('[EmailService] Simulated transport failure for test verification');
+      return { success: false, error: 'Simulated email provider network failure' };
+    }
+
+    mockEmailQueue.push({
+      type: 'otp',
+      to,
+      from: senderEmail,
+      subject,
+      text: textContent,
+      html: htmlContent,
+      otp,
+      sentAt: new Date()
+    });
+
+    return {
+      success: true,
+      messageId: `mock-otp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    };
+  }
+
+  // 4. Official Resend SDK Dispatch
+  const resend = getResendClient();
+  if (!resend) {
+    const errorMsg = 'Resend client is uninitialized: RESEND_API_KEY is missing.';
+    console.error(`[EmailService] ${errorMsg}`);
+    return { success: false, error: errorMsg };
+  }
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: senderEmail,
+      to: [to],
+      subject,
+      html: htmlContent,
+      text: textContent
+    });
+
+    if (error) {
+      console.error(`[EmailService] Resend API error (${error.name || 'Error'}):`, error.message || error);
+      return { success: false, error: error.message || 'Resend provider error' };
+    }
+
+    return {
+      success: true,
+      messageId: data?.id || 'resend-delivered'
+    };
+  } catch (err) {
+    console.error('[EmailService] Resend exception during dispatch:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+

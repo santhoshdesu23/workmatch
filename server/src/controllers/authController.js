@@ -4,9 +4,10 @@ import { User } from '../models/User.js';
 import { WorkerProfile } from '../models/WorkerProfile.js';
 import { EmployerProfile } from '../models/EmployerProfile.js';
 import { VerificationRequest } from '../models/VerificationRequest.js';
+import { EmailOtp } from '../models/EmailOtp.js';
 import { ROLES } from '../config/constants.js';
 import { signToken } from '../config/jwt.js';
-import { sendPasswordResetEmail, sendVerificationEmail } from '../services/emailService.js';
+import { sendPasswordResetEmail, sendVerificationEmail, sendVerificationOtpEmail } from '../services/emailService.js';
 import { validateNameField } from '../utils/nameValidator.js';
 
 const ALLOWED_REGISTRATION_ROLES = [ROLES.WORKER, ROLES.EMPLOYER];
@@ -110,13 +111,47 @@ export const register = async (req, res, next) => {
       });
     }
 
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isEnforced = isProduction || process.env.REQUIRE_REGISTRATION_VERIFICATION === 'true' || req.headers['x-require-otp-verification'] === 'true';
+
+    // Verify backend OTP state (do not trust frontend emailVerified flag)
+    const otpRecord = await EmailOtp.findOne({ email: normalizedEmail });
+    let isEmailOtpVerified = false;
+
+    if (otpRecord && otpRecord.verified && otpRecord.verifiedExpires && new Date(otpRecord.verifiedExpires).getTime() > Date.now()) {
+      if (req.body.verificationToken) {
+        const hashedProvided = crypto.createHash('sha256').update(String(req.body.verificationToken).trim()).digest('hex');
+        if (otpRecord.verificationToken && otpRecord.verificationToken === hashedProvided) {
+          isEmailOtpVerified = true;
+        }
+      } else {
+        isEmailOtpVerified = true;
+      }
+    }
+
+    if (isEnforced && !isEmailOtpVerified) {
+      return res.status(403).json({
+        success: false,
+        code: 'EMAIL_VERIFICATION_REQUIRED',
+        message: 'Email address has not been verified. Please complete email verification before registering.'
+      });
+    }
+
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // Generate cryptographically secure verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const hashedVerificationToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
-    const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    // If OTP verified on backend, mark user emailVerified: true immediately
+    const userEmailVerified = Boolean(isEmailOtpVerified);
+    let hashedVerificationToken = undefined;
+    let emailVerificationExpires = undefined;
+    let verificationToken = undefined;
+
+    if (!isEmailOtpVerified) {
+      // Legacy flow for backward-compatible test fixtures
+      verificationToken = crypto.randomBytes(32).toString('hex');
+      hashedVerificationToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
+      emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    }
 
     const user = await User.create({
       firstName: trimmedFirst,
@@ -126,10 +161,16 @@ export const register = async (req, res, next) => {
       passwordHash,
       role,
       passwordChangedAt: new Date(),
-      emailVerified: false,
+      emailVerified: userEmailVerified,
+      verificationStatus: userEmailVerified ? 'verified' : 'unverified',
       emailVerificationToken: hashedVerificationToken,
       emailVerificationExpires
     });
+
+    // If OTP record was consumed, clean it up so it cannot be reused
+    if (otpRecord && isEmailOtpVerified) {
+      await EmailOtp.deleteOne({ _id: otpRecord._id });
+    }
 
     // Create appropriate profile
     let profile = null;
@@ -142,32 +183,37 @@ export const register = async (req, res, next) => {
     } else if (role === ROLES.EMPLOYER) {
       profile = await EmployerProfile.create({
         user: user._id,
-        businessName: businessName?.trim() || `${name.trim()}'s Organization`
+        businessName: businessName?.trim() || `${finalName}'s Organization`
       });
     }
 
-    // Safely dispatch verification email
-    const emailResult = await sendVerificationEmail({
-      to: user.email,
-      verificationToken,
-      userName: user.name
-    });
+    let emailResult = { success: true };
+    if (!userEmailVerified && verificationToken) {
+      // Safely dispatch verification email for unverified legacy accounts
+      emailResult = await sendVerificationEmail({
+        to: user.email,
+        verificationToken,
+        userName: user.name
+      });
 
-    if (!emailResult.success) {
-      console.error(`[Auth] Verification email dispatch failed for user ${user._id}: ${emailResult.error}`);
+      if (!emailResult.success) {
+        console.error(`[Auth] Verification email dispatch failed for user ${user._id}: ${emailResult.error}`);
+      }
     }
 
     const provider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
     const isLiveEmailProvider = provider === 'resend' || provider === 'brevo';
-    const canExposeDevVerificationToken = process.env.NODE_ENV !== 'production' && !isLiveEmailProvider;
+    const canExposeDevVerificationToken = process.env.NODE_ENV !== 'production' && !isLiveEmailProvider && !userEmailVerified;
 
     const token = signToken({ id: user._id, role: user.role, tokenVersion: user.tokenVersion || 0 });
 
     res.status(201).json({
       success: true,
-      message: emailResult.success
-        ? 'Account registered successfully. Verification email sent. Please check your inbox.'
-        : "Account registered successfully, but we couldn't send your verification email. Please use the resend verification option.",
+      message: userEmailVerified
+        ? 'Account registered successfully.'
+        : emailResult.success
+          ? 'Account registered successfully. Verification email sent. Please check your inbox.'
+          : "Account registered successfully, but we couldn't send your verification email. Please use the resend verification option.",
       emailSent: Boolean(emailResult.success),
       token,
       user: {
@@ -608,6 +654,194 @@ export const submitVerificationRequest = async (req, res, next) => {
       success: true,
       message: 'Verification request submitted successfully for moderation.',
       verification: vReq
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Dispatches a 4-digit verification OTP to the user's email before registration.
+ * Applies 60-second cooldown, 5-minute expiration, and secure HMAC storage.
+ */
+export const sendRegistrationOtp = async (req, res, next) => {
+  try {
+    const { email } = req.body || {};
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'A valid email address is required.'
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid email address.'
+      });
+    }
+
+    // Check if an account already exists with this email
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: 'An account with this email address already exists. Please log in.'
+      });
+    }
+
+    // 60-second cooldown check per email
+    const existingOtp = await EmailOtp.findOne({ email: normalizedEmail });
+    if (existingOtp && existingOtp.lastSentAt) {
+      const timeSinceLast = Date.now() - new Date(existingOtp.lastSentAt).getTime();
+      if (timeSinceLast < 60 * 1000) {
+        const remainingSeconds = Math.ceil((60000 - timeSinceLast) / 1000);
+        return res.status(429).json({
+          success: false,
+          cooldownRemaining: remainingSeconds,
+          message: `Please wait ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'} before requesting another code.`
+        });
+      }
+    }
+
+    // Generate cryptographically secure 4-digit numeric code (0000 - 9999, preserving leading zeros)
+    const randomVal = crypto.randomInt(0, 10000);
+    const otp = String(randomVal).padStart(4, '0');
+
+    // Secure HMAC of OTP (secret kept in backend environment)
+    const hmacSecret = process.env.OTP_SECRET || process.env.JWT_SECRET || 'workmatch-secure-otp-hmac-key';
+    const otpHash = crypto.createHmac('sha256', hmacSecret).update(otp).digest('hex');
+
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiration
+
+    await EmailOtp.findOneAndUpdate(
+      { email: normalizedEmail },
+      {
+        $set: {
+          otpHash,
+          attempts: 0,
+          expiresAt,
+          lastSentAt: new Date(),
+          verified: false,
+          verifiedAt: null,
+          verificationToken: null,
+          verifiedExpires: null
+        }
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    // Send OTP email using existing Brevo integration
+    const emailResult = await sendVerificationOtpEmail({
+      to: normalizedEmail,
+      otp,
+      userName: 'Future WorkMatch Member'
+    });
+
+    if (!emailResult.success) {
+      console.error(`[Auth] OTP dispatch failed for email ${normalizedEmail}: ${emailResult.error}`);
+      return res.status(502).json({
+        success: false,
+        message: "We couldn't deliver the verification code to your email. Please check your address and try again."
+      });
+    }
+
+    // Never leak OTP in API response or logs
+    res.status(200).json({
+      success: true,
+      message: 'Verification code sent. Check your inbox.'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Verifies the 4-digit OTP code against the stored secure HMAC.
+ * Enforces 5-minute expiry and maximum 5 verification attempts.
+ */
+export const verifyRegistrationOtp = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body || {};
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required.'
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    if (!otp || typeof otp !== 'string' || !/^\d{4}$/.test(otp.trim())) {
+      return res.status(400).json({
+        success: false,
+        message: 'A 4-digit verification code is required.'
+      });
+    }
+
+    const cleanOtp = otp.trim();
+    const otpRecord = await EmailOtp.findOne({ email: normalizedEmail });
+
+    if (!otpRecord || !otpRecord.otpHash) {
+      return res.status(400).json({
+        success: false,
+        message: 'Verification code has expired or was not requested. Please request a new code.'
+      });
+    }
+
+    if (otpRecord.expiresAt && new Date(otpRecord.expiresAt).getTime() < Date.now()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Verification code has expired. Please request a new code.'
+      });
+    }
+
+    if ((otpRecord.attempts || 0) >= 5) {
+      return res.status(400).json({
+        success: false,
+        message: 'Maximum verification attempts exceeded. Please request a new code.'
+      });
+    }
+
+    const hmacSecret = process.env.OTP_SECRET || process.env.JWT_SECRET || 'workmatch-secure-otp-hmac-key';
+    const computedHash = crypto.createHmac('sha256', hmacSecret).update(cleanOtp).digest('hex');
+
+    const expectedBuf = Buffer.from(otpRecord.otpHash, 'hex');
+    const actualBuf = Buffer.from(computedHash, 'hex');
+
+    const isMatch = expectedBuf.length === actualBuf.length && crypto.timingSafeEqual(expectedBuf, actualBuf);
+
+    if (!isMatch) {
+      const newAttempts = (otpRecord.attempts || 0) + 1;
+      otpRecord.attempts = newAttempts;
+      await otpRecord.save();
+
+      const remaining = Math.max(0, 5 - newAttempts);
+      return res.status(400).json({
+        success: false,
+        remainingAttempts: remaining,
+        message: remaining > 0
+          ? `Invalid verification code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+          : 'Maximum verification attempts exceeded. Please request a new code.'
+      });
+    }
+
+    // Success: Generate cryptographically secure single-use proof token
+    const verificationSessionToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(verificationSessionToken).digest('hex');
+
+    otpRecord.verified = true;
+    otpRecord.verifiedAt = new Date();
+    otpRecord.verificationToken = tokenHash;
+    otpRecord.verifiedExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins to complete registration form
+    otpRecord.otpHash = undefined; // Invalidate OTP immediately to prevent replay
+    await otpRecord.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Email verified successfully!',
+      verificationToken: verificationSessionToken
     });
   } catch (error) {
     next(error);

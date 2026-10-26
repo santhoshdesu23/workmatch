@@ -1,5 +1,15 @@
 import mongoose from 'mongoose';
 
+const submittedDataSchema = new mongoose.Schema(
+  {
+    businessName: { type: String },
+    registrationNumber: { type: String },
+    documentType: { type: String },
+    documentRef: { type: String }
+  },
+  { _id: false }
+);
+
 const verificationRequestSchema = new mongoose.Schema(
   {
     user: {
@@ -20,10 +30,8 @@ const verificationRequestSchema = new mongoose.Schema(
       index: true
     },
     submittedData: {
-      businessName: { type: String },
-      registrationNumber: { type: String },
-      documentType: { type: String },
-      documentRef: { type: String }
+      type: submittedDataSchema,
+      default: undefined
     },
     reviewNotes: {
       type: String,
