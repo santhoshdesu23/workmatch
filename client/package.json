@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "node --test src/utils/jobSearchParams.test.mjs",
+    "test": "node --test src/utils/jobSearchParams.test.mjs src/utils/scheduleValidation.test.mjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },

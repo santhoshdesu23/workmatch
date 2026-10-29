@@ -25,6 +25,11 @@ export const EmployerDashboardPage: React.FC = () => {
   const { user } = useAuth();
   const [metrics, setMetrics] = useState({
     activeJobsCount: 0,
+    openJobsCount: 0,
+    closedApplicationsCount: 0,
+    ongoingJobsCount: 0,
+    upcomingJobsCount: 0,
+    pastJobsCount: 0,
     totalJobsCount: 0,
     totalApplicationsCount: 0,
     shortlistedCount: 0,
@@ -147,6 +152,31 @@ export const EmployerDashboardPage: React.FC = () => {
           <div className="text-[11px] text-slate-400 pt-1">Lifetime postings</div>
         </Card>
       </div>
+
+      {/* Shift Lifecycle Status Breakdown */}
+      <Card className="p-5 space-y-3">
+        <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+          <Clock className="w-4 h-4 text-emerald-600" /> Shift Operational Breakdown
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+          <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+            <div className="text-xl font-bold text-emerald-700">{metrics.openJobsCount || 0}</div>
+            <div className="text-[11px] font-semibold text-emerald-800">Accepting Applications</div>
+          </div>
+          <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl">
+            <div className="text-xl font-bold text-amber-700">{metrics.closedApplicationsCount || 0}</div>
+            <div className="text-[11px] font-semibold text-amber-800">Applications Closed</div>
+          </div>
+          <div className="p-3 bg-sky-50 border border-sky-100 rounded-xl">
+            <div className="text-xl font-bold text-sky-700">{metrics.ongoingJobsCount || 0}</div>
+            <div className="text-[11px] font-semibold text-sky-800">Ongoing Shifts</div>
+          </div>
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+            <div className="text-xl font-bold text-slate-700">{metrics.pastJobsCount || 0}</div>
+            <div className="text-[11px] font-semibold text-slate-800">Past / Ended Work</div>
+          </div>
+        </div>
+      </Card>
 
       {/* Recent Applications Feed */}
       <Card className="p-6 space-y-4">

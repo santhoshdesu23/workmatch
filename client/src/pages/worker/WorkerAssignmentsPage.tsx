@@ -20,6 +20,7 @@ import { Modal } from '../../components/common/Modal';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { EmptyState } from '../../components/common/EmptyState';
 import { formatINR } from '../../utils/currency';
+import { isJobWorkEnded, isJobWorkOngoing } from '../../utils/scheduleValidation';
 
 export const WorkerAssignmentsPage: React.FC = () => {
   const { success, error: toastError } = useToast();
@@ -31,6 +32,15 @@ export const WorkerAssignmentsPage: React.FC = () => {
   const [rating, setRating] = useState<number>(5);
   const [reviewText, setReviewText] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [filterTab, setFilterTab] = useState<'upcoming' | 'past' | 'all'>('upcoming');
+
+  const isPastAssignment = (a: Assignment) =>
+    a.status === 'COMPLETED' || a.status === 'CANCELLED' || isJobWorkEnded(a.agreedSchedule || a.job);
+
+  const upcomingList = assignments.filter((a) => !isPastAssignment(a));
+  const pastList = assignments.filter((a) => isPastAssignment(a));
+  const displayedAssignments =
+    filterTab === 'upcoming' ? upcomingList : filterTab === 'past' ? pastList : assignments;
 
   const fetchAssignments = async () => {
     setLoading(true);
@@ -99,37 +109,92 @@ export const WorkerAssignmentsPage: React.FC = () => {
         </p>
       </div>
 
-      {assignments.length === 0 ? (
+      {/* Tabs for Upcoming vs Past Work History */}
+      <div className="flex border-b border-slate-200 gap-4 text-sm font-semibold">
+        <button
+          onClick={() => setFilterTab('upcoming')}
+          className={`pb-2 border-b-2 cursor-pointer transition-colors ${
+            filterTab === 'upcoming'
+              ? 'border-emerald-600 text-emerald-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          Upcoming Shifts ({upcomingList.length})
+        </button>
+        <button
+          onClick={() => setFilterTab('past')}
+          className={`pb-2 border-b-2 cursor-pointer transition-colors ${
+            filterTab === 'past'
+              ? 'border-emerald-600 text-emerald-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          Past Work History ({pastList.length})
+        </button>
+        <button
+          onClick={() => setFilterTab('all')}
+          className={`pb-2 border-b-2 cursor-pointer transition-colors ${
+            filterTab === 'all'
+              ? 'border-emerald-600 text-emerald-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          All ({assignments.length})
+        </button>
+      </div>
+
+      {displayedAssignments.length === 0 ? (
         <EmptyState
           icon={CalendarCheck2}
-          title="No confirmed shifts yet"
-          description="When an employer confirms your application, your shift schedule will appear here."
-          actionText="Discover Shifts"
-          onAction={() => (window.location.href = '/jobs')}
+          title={
+            filterTab === 'upcoming'
+              ? 'No upcoming shifts scheduled'
+              : filterTab === 'past'
+              ? 'No past work records yet'
+              : 'No confirmed shifts yet'
+          }
+          description={
+            filterTab === 'upcoming'
+              ? 'Your future confirmed shifts will appear here once scheduled.'
+              : filterTab === 'past'
+              ? 'Completed and past shifts will appear here.'
+              : 'When an employer confirms your application, your shift schedule will appear here.'
+          }
+          actionText={filterTab === 'upcoming' ? 'Discover Shifts' : undefined}
+          onAction={filterTab === 'upcoming' ? () => (window.location.href = '/jobs') : undefined}
         />
       ) : (
         <div className="space-y-4">
-          {assignments.map((assign) => (
-            <Card key={assign._id} className="p-6 space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                <div className="space-y-2 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge
-                      variant={
-                        assign.status === 'COMPLETED'
-                          ? 'emerald'
-                          : assign.status === 'CONFIRMED'
-                          ? 'blue'
-                          : 'slate'
-                      }
-                      size="md"
-                    >
-                      {assign.status}
-                    </Badge>
-                    <span className="text-xs text-slate-500 font-medium break-words">
-                      Employer: <span className="font-semibold text-slate-800">{assign.employer?.name}</span>
-                    </span>
-                  </div>
+          {displayedAssignments.map((assign) => {
+            const ended = isJobWorkEnded(assign.agreedSchedule || assign.job);
+            const isPendingVerification = ended && assign.status !== 'COMPLETED' && assign.status !== 'CANCELLED';
+
+            return (
+              <Card key={assign._id} className="p-6 space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                  <div className="space-y-2 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant={
+                          assign.status === 'COMPLETED'
+                            ? 'emerald'
+                            : assign.status === 'CONFIRMED'
+                            ? 'blue'
+                            : 'slate'
+                        }
+                        size="md"
+                      >
+                        {assign.status}
+                      </Badge>
+                      {isPendingVerification && (
+                        <Badge variant="amber" size="sm">
+                          Shift Ended — Awaiting Confirmation
+                        </Badge>
+                      )}
+                      <span className="text-xs text-slate-500 font-medium break-words">
+                        Employer: <span className="font-semibold text-slate-800">{assign.employer?.name}</span>
+                      </span>
+                    </div>
 
                   <h3 className="text-base font-bold text-slate-900">{assign.job?.title}</h3>
 
@@ -225,7 +290,8 @@ export const WorkerAssignmentsPage: React.FC = () => {
                 </div>
               </div>
             </Card>
-          ))}
+          );
+        })}
         </div>
       )}
 

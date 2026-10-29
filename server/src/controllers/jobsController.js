@@ -10,6 +10,15 @@ import { JOB_STATUSES, ROLES, ASSIGNMENT_STATUSES, PAYMENT_STATUSES } from '../c
 import { computeJobMatch, calculateDistanceKm, calculateDistanceKmPrecise } from '../services/matchingService.js';
 import { createNotification } from '../services/notificationService.js';
 import { computeEmployerReliability } from '../services/reliabilityService.js';
+import {
+  validateJobSchedule,
+  formatCalendarDate,
+  isJobOpenForApplications,
+  isJobApplicationDeadlinePassed,
+  isJobWorkEnded,
+  isJobWorkOngoing,
+  getEffectiveJobStatus
+} from '../utils/scheduleUtils.js';
 
 const MATERIAL_FIELDS = [
   'title',
@@ -18,6 +27,7 @@ const MATERIAL_FIELDS = [
   'grossPay',
   'payBasis',
   'workDate',
+  'workEndDate',
   'startTime',
   'endTime',
   'totalHours',
@@ -149,6 +159,10 @@ export const getJobs = async (req, res, next) => {
       .populate('employer', 'name email verificationStatus')
       .lean();
 
+    const now = new Date();
+    // Exclude jobs whose application deadline has passed or whose scheduled work has ended
+    jobs = jobs.filter((job) => isJobOpenForApplications(job, now));
+
     // Attach employer profile info
     const employerUserIds = jobs.map((j) => j.employer?._id).filter(Boolean);
     const employerProfiles = await EmployerProfile.find({ user: { $in: employerUserIds } }).lean();
@@ -223,6 +237,10 @@ export const getJobs = async (req, res, next) => {
 
       return {
         ...job,
+        isDeadlinePassed: isJobApplicationDeadlinePassed(job, now),
+        isWorkEnded: isJobWorkEnded(job, now),
+        isWorkOngoing: isJobWorkOngoing(job, now),
+        effectiveStatus: getEffectiveJobStatus(job, now),
         employerProfile: empProf
           ? {
               businessName: empProf.businessName,
@@ -318,10 +336,20 @@ export const getJobById = async (req, res, next) => {
       userApplication = await Application.findOne({ job: jobId, worker: req.user._id }).lean();
     }
 
+    const now = new Date();
+    const isDeadlinePassed = isJobApplicationDeadlinePassed(job, now);
+    const isWorkEnded = isJobWorkEnded(job, now);
+    const isWorkOngoing = isJobWorkOngoing(job, now);
+    const effectiveStatus = getEffectiveJobStatus(job, now);
+
     res.status(200).json({
       success: true,
       job: {
         ...job,
+        isDeadlinePassed,
+        isWorkEnded,
+        isWorkOngoing,
+        effectiveStatus,
         employerProfile: empProfile
           ? {
               businessName: empProfile.businessName,
@@ -390,6 +418,8 @@ export const createJob = async (req, res, next) => {
       locationName,
       coordinates, // [lng, lat]
       workDate,
+      workEndDate,
+      endDate,
       startTime,
       endTime,
       breakDurationMinutes = 30,
@@ -426,26 +456,28 @@ export const createJob = async (req, res, next) => {
     if (!locationName || !locationName.trim()) {
       return res.status(400).json({ success: false, message: 'Location address or venue description is required.' });
     }
-    if (!workDate) {
-      return res.status(400).json({ success: false, message: 'Work date is required.' });
+
+    const scheduleValidation = validateJobSchedule({
+      workDate,
+      workEndDate: workEndDate ?? endDate,
+      startTime,
+      endTime
+    });
+    if (!scheduleValidation.isValid) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_SCHEDULE',
+        message: scheduleValidation.error,
+        errors: scheduleValidation.errors
+      });
     }
 
     const parsedWorkDate = new Date(workDate);
-    if (isNaN(parsedWorkDate.getTime())) {
-      return res.status(400).json({ success: false, message: 'Invalid work date format.' });
-    }
-
-    // Work date must not be in the past (allow timezone buffer)
-    const minAllowedDate = new Date();
-    minAllowedDate.setHours(0, 0, 0, 0);
-    minAllowedDate.setDate(minAllowedDate.getDate() - 1);
-    if (parsedWorkDate < minAllowedDate) {
-      return res.status(400).json({ success: false, message: 'Work date cannot be in the past.' });
-    }
-
-    if (!startTime || !endTime) {
-      return res.status(400).json({ success: false, message: 'Shift start and end times are required.' });
-    }
+    const rawEndDate = workEndDate ?? endDate;
+    const parsedWorkEndDate =
+      rawEndDate !== undefined && rawEndDate !== null && String(rawEndDate).trim() !== ''
+        ? new Date(rawEndDate)
+        : parsedWorkDate;
 
     const parsedGrossPay = Number(grossPay);
     if (isNaN(parsedGrossPay) || parsedGrossPay <= 0) {
@@ -457,11 +489,16 @@ export const createJob = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Total hours must be greater than zero.' });
     }
 
+    let resolvedDeadline = parsedWorkDate < scheduleValidation.startDateTime ? scheduleValidation.startDateTime : parsedWorkDate;
     if (applicationDeadline) {
       const parsedDeadline = new Date(applicationDeadline);
       if (isNaN(parsedDeadline.getTime())) {
         return res.status(400).json({ success: false, message: 'Invalid application deadline format.' });
       }
+      resolvedDeadline =
+        parsedDeadline < scheduleValidation.startDateTime && formatCalendarDate(applicationDeadline) === formatCalendarDate(workDate)
+          ? scheduleValidation.startDateTime
+          : parsedDeadline;
     }
 
     const isConfirmed = detailsConfirmed !== false;
@@ -479,8 +516,9 @@ export const createJob = async (req, res, next) => {
         coordinates: coordinates && coordinates.length === 2 ? coordinates : [0, 0]
       },
       workDate: parsedWorkDate,
-      startTime,
-      endTime,
+      workEndDate: parsedWorkEndDate,
+      startTime: startTime.trim(),
+      endTime: endTime.trim(),
       breakDurationMinutes: Number(breakDurationMinutes) || 0,
       totalHours: parsedTotalHours,
       grossPay: parsedGrossPay,
@@ -492,7 +530,7 @@ export const createJob = async (req, res, next) => {
       dressCode,
       physicalRequirements,
       ageRestriction,
-      applicationDeadline: applicationDeadline ? new Date(applicationDeadline) : parsedWorkDate,
+      applicationDeadline: resolvedDeadline,
       cancellationPolicy,
       detailsConfirmed: isConfirmed,
       detailsConfirmedAt: isConfirmed ? new Date() : null,
@@ -555,6 +593,7 @@ export const updateJob = async (req, res, next) => {
       'openings',
       'locationName',
       'workDate',
+      'workEndDate',
       'startTime',
       'endTime',
       'breakDurationMinutes',
@@ -577,6 +616,9 @@ export const updateJob = async (req, res, next) => {
       if (req.body[field] !== undefined) {
         safeUpdates[field] = req.body[field];
       }
+    }
+    if (req.body.endDate !== undefined && safeUpdates.workEndDate === undefined) {
+      safeUpdates.workEndDate = req.body.endDate;
     }
 
     // Validate category
@@ -614,7 +656,6 @@ export const updateJob = async (req, res, next) => {
       if (isNaN(parsedDate.getTime())) {
         return res.status(400).json({ success: false, message: 'Invalid work date format.' });
       }
-      safeUpdates.workDate = parsedDate;
     }
 
     // Validate openings against current commitments
@@ -646,7 +687,8 @@ export const updateJob = async (req, res, next) => {
         });
       }
       if (
-        (safeUpdates.workDate !== undefined && new Date(safeUpdates.workDate).toISOString().slice(0, 10) !== new Date(job.workDate).toISOString().slice(0, 10)) ||
+        (safeUpdates.workDate !== undefined && formatCalendarDate(safeUpdates.workDate) !== formatCalendarDate(job.workDate)) ||
+        (safeUpdates.workEndDate !== undefined && formatCalendarDate(safeUpdates.workEndDate) !== formatCalendarDate(job.workEndDate || job.workDate)) ||
         (safeUpdates.startTime !== undefined && safeUpdates.startTime !== job.startTime) ||
         (safeUpdates.endTime !== undefined && safeUpdates.endTime !== job.endTime)
       ) {
@@ -654,6 +696,53 @@ export const updateJob = async (req, res, next) => {
           success: false,
           message: `Cannot alter work date or shift times while ${activeAssignmentsCount} active shift assignment(s) are confirmed. Contact workers and administration directly to reschedule.`
         });
+      }
+    }
+
+    // Validate updated schedule whenever any schedule field is modified
+    if (
+      safeUpdates.workDate !== undefined ||
+      safeUpdates.workEndDate !== undefined ||
+      safeUpdates.startTime !== undefined ||
+      safeUpdates.endTime !== undefined
+    ) {
+      const nextWorkDate = safeUpdates.workDate !== undefined ? safeUpdates.workDate : job.workDate;
+      const nextWorkEndDate =
+        safeUpdates.workEndDate !== undefined
+          ? safeUpdates.workEndDate
+          : safeUpdates.workDate !== undefined
+          ? safeUpdates.workDate
+          : job.workEndDate || job.workDate;
+      const nextStartTime = safeUpdates.startTime !== undefined ? safeUpdates.startTime : job.startTime;
+      const nextEndTime = safeUpdates.endTime !== undefined ? safeUpdates.endTime : job.endTime;
+
+      const scheduleValidation = validateJobSchedule({
+        workDate: nextWorkDate,
+        workEndDate: nextWorkEndDate,
+        startTime: nextStartTime,
+        endTime: nextEndTime
+      });
+
+      if (!scheduleValidation.isValid) {
+        return res.status(400).json({
+          success: false,
+          code: 'INVALID_SCHEDULE',
+          message: scheduleValidation.error,
+          errors: scheduleValidation.errors
+        });
+      }
+
+      if (safeUpdates.workDate !== undefined) {
+        safeUpdates.workDate = new Date(safeUpdates.workDate);
+      }
+      if (safeUpdates.workEndDate !== undefined) {
+        safeUpdates.workEndDate = new Date(safeUpdates.workEndDate);
+      }
+      if (typeof safeUpdates.startTime === 'string') {
+        safeUpdates.startTime = safeUpdates.startTime.trim();
+      }
+      if (typeof safeUpdates.endTime === 'string') {
+        safeUpdates.endTime = safeUpdates.endTime.trim();
       }
     }
 
@@ -679,8 +768,10 @@ export const updateJob = async (req, res, next) => {
         const newVal = safeUpdates[key];
         let isDiff = false;
 
-        if (key === 'workDate' || key === 'applicationDeadline') {
-          isDiff = new Date(oldVal).toISOString() !== new Date(newVal).toISOString();
+        if (key === 'workDate' || key === 'workEndDate' || key === 'applicationDeadline') {
+          const oldIso = oldVal ? new Date(oldVal).toISOString() : '';
+          const newIso = newVal ? new Date(newVal).toISOString() : '';
+          isDiff = oldIso !== newIso;
         } else if (key === 'requiredSkills') {
           const oldArr = Array.isArray(oldVal) ? oldVal : [];
           const newArr = Array.isArray(newVal) ? newVal : [];
@@ -727,7 +818,7 @@ export const updateJob = async (req, res, next) => {
 
       const friendlyNames = changedFieldNames.map((f) => {
         if (f === 'grossPay') return 'compensation rate';
-        if (f === 'workDate') return 'shift date';
+        if (f === 'workDate' || f === 'workEndDate') return 'shift date';
         if (f === 'startTime' || f === 'endTime') return 'shift hours';
         if (f === 'locationName') return 'location address';
         if (f === 'openings') return 'available openings';
@@ -754,6 +845,10 @@ export const updateJob = async (req, res, next) => {
           relatedResource: { resourceType: 'Job', resourceId: jobId }
         });
       }
+    }
+
+    if (safeUpdates.workDate !== undefined && safeUpdates.workEndDate === undefined) {
+      safeUpdates.workEndDate = safeUpdates.workDate;
     }
 
     const updatedJob = await Job.findByIdAndUpdate(jobId, safeUpdates, { new: true, runValidators: true });

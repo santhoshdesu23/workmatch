@@ -6,7 +6,8 @@ import {
   ArrowLeft,
   Navigation,
   Mail,
-  RefreshCw
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -15,6 +16,11 @@ import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { formatPayWithBasis } from '../../utils/currency';
+import {
+  validateJobSchedule,
+  getTodayDateString,
+  formatCalendarDate
+} from '../../utils/scheduleValidation';
 
 export const CreateJobPage: React.FC = () => {
   const navigate = useNavigate();
@@ -55,8 +61,10 @@ export const CreateJobPage: React.FC = () => {
   const [locationName, setLocationName] = useState('');
   const [coordinates, setCoordinates] = useState<[number, number]>([-73.9851, 40.7484]); // Default NYC Midtown
   const [workDate, setWorkDate] = useState('');
+  const [workEndDate, setWorkEndDate] = useState('');
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('17:00');
+  const [scheduleTouched, setScheduleTouched] = useState(false);
   const [breakDurationMinutes, setBreakDurationMinutes] = useState<number>(30);
   const [totalHours, setTotalHours] = useState<number>(7.5);
 
@@ -92,6 +100,54 @@ export const CreateJobPage: React.FC = () => {
   const OTHER_CATEGORY_LABEL = 'Other (Specify your category)';
 
   const resolvedCategory = selectedCategory === OTHER_CATEGORY_VALUE ? customCategory.trim() : selectedCategory;
+
+  const todayDateStr = getTodayDateString();
+  const effectiveEndDate = workEndDate || workDate;
+  const scheduleValidation = validateJobSchedule({
+    workDate,
+    workEndDate: effectiveEndDate,
+    startTime,
+    endTime
+  });
+
+  const showWorkDateError = Boolean(
+    (Boolean(workDate) || scheduleTouched) && scheduleValidation.errors.workDate
+  );
+  const showWorkEndDateError = Boolean(
+    (Boolean(workEndDate) || scheduleTouched) && scheduleValidation.errors.workEndDate
+  );
+  const showStartTimeError = Boolean(
+    (Boolean(workDate) || scheduleTouched || !startTime) && scheduleValidation.errors.startTime
+  );
+  const showEndTimeError = Boolean(
+    (Boolean(workDate) || scheduleTouched || Boolean(scheduleValidation.errors.endTime)) &&
+      scheduleValidation.errors.endTime
+  );
+  const hasVisibleScheduleError =
+    showWorkDateError || showWorkEndDateError || showStartTimeError || showEndTimeError;
+
+  const handleWorkDateChange = (newStartDate: string) => {
+    setScheduleTouched(true);
+    setWorkDate(newStartDate);
+    if (!workEndDate || workEndDate === workDate || (newStartDate && workEndDate < newStartDate)) {
+      setWorkEndDate(newStartDate);
+    }
+  };
+
+  const handleWorkEndDateChange = (newEndDate: string) => {
+    setScheduleTouched(true);
+    setWorkEndDate(newEndDate);
+  };
+
+  const handleStartTimeChange = (newStartTime: string) => {
+    setScheduleTouched(true);
+    setStartTime(newStartTime);
+  };
+
+  const handleEndTimeChange = (newEndTime: string) => {
+    setScheduleTouched(true);
+    setEndTime(newEndTime);
+  };
 
   const handleUseBrowserGPS = () => {
     if (!navigator.geolocation) {
@@ -134,23 +190,19 @@ export const CreateJobPage: React.FC = () => {
         return false;
       }
     } else if (step === 2) {
+      setScheduleTouched(true);
       if (!locationName.trim()) {
         toastError('Please specify the work address or venue location.');
         return false;
       }
-      if (!workDate) {
-        toastError('Please select the scheduled shift date.');
-        return false;
-      }
-      const selectedDate = new Date(workDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (selectedDate < today) {
-        toastError('Work date cannot be in the past.');
-        return false;
-      }
-      if (!startTime || !endTime) {
-        toastError('Please select both start and end shift times.');
+      const currentScheduleCheck = validateJobSchedule({
+        workDate,
+        workEndDate: workEndDate || workDate,
+        startTime,
+        endTime
+      });
+      if (!currentScheduleCheck.isValid) {
+        toastError(currentScheduleCheck.error || 'Please provide a valid future work schedule.');
         return false;
       }
       if (totalHours <= 0) {
@@ -173,7 +225,7 @@ export const CreateJobPage: React.FC = () => {
       }
       if (!applicationDeadline) {
         setApplicationDeadline(workDate);
-      } else if (new Date(applicationDeadline) > new Date(workDate)) {
+      } else if (formatCalendarDate(applicationDeadline) > formatCalendarDate(workDate)) {
         toastError('Application deadline cannot be after the scheduled work date.');
         return false;
       }
@@ -197,6 +249,18 @@ export const CreateJobPage: React.FC = () => {
       return;
     }
 
+    const currentScheduleCheck = validateJobSchedule({
+      workDate,
+      workEndDate: workEndDate || workDate,
+      startTime,
+      endTime
+    });
+    if (!currentScheduleCheck.isValid) {
+      setScheduleTouched(true);
+      toastError(currentScheduleCheck.error || 'Work schedule is invalid. Please update the shift dates and times.');
+      return;
+    }
+
     if (!detailsConfirmed) {
       toastError('Please check the confirmation box to confirm that the displayed shift details are accurate and binding.');
       return;
@@ -213,6 +277,7 @@ export const CreateJobPage: React.FC = () => {
         locationName,
         coordinates,
         workDate,
+        workEndDate: workEndDate || workDate,
         startTime,
         endTime,
         breakDurationMinutes,
@@ -244,6 +309,8 @@ export const CreateJobPage: React.FC = () => {
       setIsSubmitting(false);
     }
   };
+
+  const isStep2ContinueDisabled = currentStep === 2 && !scheduleValidation.isValid;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -381,40 +448,121 @@ export const CreateJobPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Shift Date *</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label htmlFor="work-start-date" className="block text-xs font-semibold text-slate-700">
+                Work Start Date *
+              </label>
               <input
+                id="work-start-date"
                 type="date"
                 required
+                min={todayDateStr}
                 value={workDate}
-                onChange={(e) => setWorkDate(e.target.value)}
-                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+                onChange={(e) => handleWorkDateChange(e.target.value)}
+                className={`w-full text-xs p-2.5 border rounded-xl focus:outline-none focus:ring-1 transition-colors ${
+                  showWorkDateError
+                    ? 'border-rose-400 focus:ring-rose-500 bg-rose-50/20'
+                    : 'border-slate-200 focus:ring-emerald-500'
+                }`}
               />
+              {showWorkDateError && (
+                <p id="work-start-date-error" role="alert" className="text-[11px] text-rose-600 font-medium">
+                  {scheduleValidation.errors.workDate}
+                </p>
+              )}
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Start Time *</label>
+            <div className="space-y-1">
+              <label htmlFor="work-start-time" className="block text-xs font-semibold text-slate-700">
+                Start Time *
+              </label>
               <input
+                id="work-start-time"
                 type="time"
                 required
                 value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+                onChange={(e) => handleStartTimeChange(e.target.value)}
+                className={`w-full text-xs p-2.5 border rounded-xl focus:outline-none focus:ring-1 transition-colors ${
+                  showStartTimeError
+                    ? 'border-rose-400 focus:ring-rose-500 bg-rose-50/20'
+                    : 'border-slate-200 focus:ring-emerald-500'
+                }`}
               />
+              {showStartTimeError && (
+                <p id="work-start-time-error" role="alert" className="text-[11px] text-rose-600 font-medium">
+                  {scheduleValidation.errors.startTime}
+                </p>
+              )}
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">End Time *</label>
+            <div className="space-y-1">
+              <label htmlFor="work-end-date" className="block text-xs font-semibold text-slate-700">
+                Work End Date *
+              </label>
               <input
+                id="work-end-date"
+                type="date"
+                required
+                min={workDate || todayDateStr}
+                value={effectiveEndDate}
+                onChange={(e) => handleWorkEndDateChange(e.target.value)}
+                className={`w-full text-xs p-2.5 border rounded-xl focus:outline-none focus:ring-1 transition-colors ${
+                  showWorkEndDateError
+                    ? 'border-rose-400 focus:ring-rose-500 bg-rose-50/20'
+                    : 'border-slate-200 focus:ring-emerald-500'
+                }`}
+              />
+              {showWorkEndDateError ? (
+                <p id="work-end-date-error" role="alert" className="text-[11px] text-rose-600 font-medium">
+                  {scheduleValidation.errors.workEndDate}
+                </p>
+              ) : (
+                <p className="text-[10px] text-slate-400">
+                  Defaults to start date. Select the next day for overnight shifts.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <label htmlFor="work-end-time" className="block text-xs font-semibold text-slate-700">
+                End Time *
+              </label>
+              <input
+                id="work-end-time"
                 type="time"
                 required
                 value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+                onChange={(e) => handleEndTimeChange(e.target.value)}
+                className={`w-full text-xs p-2.5 border rounded-xl focus:outline-none focus:ring-1 transition-colors ${
+                  showEndTimeError
+                    ? 'border-rose-400 focus:ring-rose-500 bg-rose-50/20'
+                    : 'border-slate-200 focus:ring-emerald-500'
+                }`}
               />
+              {showEndTimeError && (
+                <p id="work-end-time-error" role="alert" className="text-[11px] text-rose-600 font-medium">
+                  {scheduleValidation.errors.endTime}
+                </p>
+              )}
             </div>
           </div>
+
+          {hasVisibleScheduleError && scheduleValidation.error && (
+            <div
+              role="alert"
+              className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2"
+            >
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span>{scheduleValidation.error}</span>
+            </div>
+          )}
+
+          {scheduleValidation.isValid && scheduleValidation.isOvernight && (
+            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 font-medium">
+              Overnight shift scheduled: begins on {workDate} at {startTime} and ends on {effectiveEndDate} at {endTime} ({scheduleValidation.durationHours} hrs).
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -607,7 +755,9 @@ export const CreateJobPage: React.FC = () => {
               <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Step 5: Shift Preview</h2>
               <p className="text-xs text-slate-500">Confirm all details before publishing to marketplace</p>
             </div>
-            <Badge variant="emerald">Ready to Publish</Badge>
+            <Badge variant={scheduleValidation.isValid ? 'emerald' : 'amber'}>
+              {scheduleValidation.isValid ? 'Ready to Publish' : 'Schedule Needs Update'}
+            </Badge>
           </div>
 
           <div className="space-y-4">
@@ -620,7 +770,11 @@ export const CreateJobPage: React.FC = () => {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-slate-50 p-4 rounded-xl">
               <div>
                 <span className="text-slate-400 block">Work Date</span>
-                <span className="font-bold text-slate-800">{workDate}</span>
+                <span className="font-bold text-slate-800">
+                  {effectiveEndDate && effectiveEndDate !== workDate
+                    ? `${workDate} → ${effectiveEndDate}`
+                    : workDate}
+                </span>
               </div>
               <div>
                 <span className="text-slate-400 block">Hours</span>
@@ -635,6 +789,16 @@ export const CreateJobPage: React.FC = () => {
                 <span className="font-bold text-slate-800">{openings} workers</span>
               </div>
             </div>
+
+            {!scheduleValidation.isValid && scheduleValidation.error && (
+              <div
+                role="alert"
+                className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2"
+              >
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{scheduleValidation.error}</span>
+              </div>
+            )}
 
             <div className="text-xs space-y-1 text-slate-600">
               <div><strong>Location:</strong> {locationName}</div>
@@ -709,20 +873,28 @@ export const CreateJobPage: React.FC = () => {
         ) : <div />}
 
         {currentStep < 5 ? (
-          <Button type="button" size="sm" onClick={nextStep} rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
+          <Button
+            type="button"
+            size="sm"
+            disabled={isStep2ContinueDisabled}
+            onClick={nextStep}
+            rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
+          >
             Continue
           </Button>
         ) : (
           <Button
             type="button"
             size="sm"
-            disabled={Boolean(user && !user.emailVerified) || !detailsConfirmed}
+            disabled={Boolean(user && !user.emailVerified) || !detailsConfirmed || !scheduleValidation.isValid}
             isLoading={isSubmitting}
             onClick={handlePublish}
             leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
           >
             {user && !user.emailVerified
               ? 'Email Verification Required to Publish'
+              : !scheduleValidation.isValid
+              ? 'Valid Schedule Required to Publish'
               : !detailsConfirmed
               ? 'Confirm Shift Details to Publish'
               : 'Publish Shift to Marketplace'}

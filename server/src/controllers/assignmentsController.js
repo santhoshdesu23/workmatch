@@ -5,6 +5,7 @@ import { Application } from '../models/Application.js';
 import { Job } from '../models/Job.js';
 import { ASSIGNMENT_STATUSES, PAYMENT_STATUSES, APPLICATION_STATUSES, JOB_STATUSES, ROLES } from '../config/constants.js';
 import { createNotification } from '../services/notificationService.js';
+import { isJobWorkEnded, isJobWorkOngoing } from '../utils/scheduleUtils.js';
 
 export const getMyAssignments = async (req, res, next) => {
   try {
@@ -24,8 +25,11 @@ export const getMyAssignments = async (req, res, next) => {
     const paymentMap = new Map();
     payments.forEach((p) => paymentMap.set(p.assignment.toString(), p));
 
+    const now = new Date();
     const enriched = assignments.map((a) => ({
       ...a,
+      isWorkEnded: isJobWorkEnded(a.agreedSchedule || a.job, now),
+      isWorkOngoing: isJobWorkOngoing(a.agreedSchedule || a.job, now),
       payment: paymentMap.get(a._id.toString()) || null
     }));
 

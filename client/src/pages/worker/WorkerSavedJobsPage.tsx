@@ -10,6 +10,11 @@ import { Badge } from '../../components/common/Badge';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { EmptyState } from '../../components/common/EmptyState';
 import { formatPayWithBasis } from '../../utils/currency';
+import {
+  isJobApplicationDeadlinePassed,
+  isJobWorkEnded,
+  getEffectiveJobStatus
+} from '../../utils/scheduleValidation';
 
 export const WorkerSavedJobsPage: React.FC = () => {
   const { success, error: toastError } = useToast();
@@ -73,7 +78,18 @@ export const WorkerSavedJobsPage: React.FC = () => {
             <Card key={job._id} className="p-5">
               <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
                 <div className="space-y-1.5 flex-1">
-                  <Badge variant="emerald" size="sm">{job.category}</Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="emerald" size="sm">{job.category}</Badge>
+                    {(job.isWorkEnded ?? isJobWorkEnded(job)) ? (
+                      <Badge variant="slate" size="sm">Past Shift</Badge>
+                    ) : (job.isDeadlinePassed ?? isJobApplicationDeadlinePassed(job)) ? (
+                      <Badge variant="amber" size="sm">Applications Closed</Badge>
+                    ) : job.status === 'OPEN' ? (
+                      <Badge variant="blue" size="sm">Open</Badge>
+                    ) : (
+                      <Badge variant="slate" size="sm">{job.status}</Badge>
+                    )}
+                  </div>
                   <Link to={`/jobs/${job._id}`}>
                     <h3 className="text-base font-bold text-slate-900 hover:text-emerald-600 transition-colors">
                       {job.title}

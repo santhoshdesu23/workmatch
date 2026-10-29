@@ -28,6 +28,7 @@ const assignmentSchema = new mongoose.Schema(
     },
     agreedSchedule: {
       workDate: { type: Date, required: true },
+      workEndDate: { type: Date },
       startTime: { type: String, required: true },
       endTime: { type: String, required: true },
       totalHours: { type: Number, required: true }

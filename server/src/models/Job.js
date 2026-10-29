@@ -101,6 +101,12 @@ const jobSchema = new mongoose.Schema(
       required: true,
       index: true
     },
+    workEndDate: {
+      type: Date,
+      default: function () {
+        return this.workDate;
+      }
+    },
     startTime: {
       type: String,
       required: true // e.g. "09:00"

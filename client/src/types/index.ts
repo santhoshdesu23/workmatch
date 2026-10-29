@@ -107,6 +107,7 @@ export interface Job {
     coordinates: [number, number];
   };
   workDate: string;
+  workEndDate?: string;
   startTime: string;
   endTime: string;
   breakDurationMinutes: number;
@@ -123,6 +124,10 @@ export interface Job {
   applicationDeadline: string;
   cancellationPolicy: string;
   status: 'DRAFT' | 'OPEN' | 'FILLED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
+  isDeadlinePassed?: boolean;
+  isWorkEnded?: boolean;
+  isWorkOngoing?: boolean;
+  effectiveStatus?: string;
   detailsConfirmed?: boolean;
   detailsConfirmedAt?: string;
   detailsConfirmedBy?: string;
@@ -209,6 +214,7 @@ export interface Assignment {
   application: string;
   agreedSchedule: {
     workDate: string;
+    workEndDate?: string;
     startTime: string;
     endTime: string;
     totalHours: number;

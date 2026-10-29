@@ -8,7 +8,12 @@ import { User } from '../models/User.js';
 import { APPLICATION_STATUSES, ASSIGNMENT_STATUSES, JOB_STATUSES, PAYMENT_STATUSES, ROLES } from '../config/constants.js';
 import { computeJobMatch } from '../services/matchingService.js';
 import { createNotification } from '../services/notificationService.js';
-import { getShiftInterval, shiftsOverlap } from '../utils/scheduleUtils.js';
+import {
+  getShiftInterval,
+  shiftsOverlap,
+  isJobApplicationDeadlinePassed,
+  isJobWorkEnded
+} from '../utils/scheduleUtils.js';
 
 export const applyToJob = async (req, res, next) => {
   try {
@@ -31,11 +36,16 @@ export const applyToJob = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Job not found.' });
     }
 
+    const now = new Date();
     if (job.status !== JOB_STATUSES.OPEN) {
       return res.status(400).json({ success: false, message: `Cannot apply: job status is ${job.status}.` });
     }
 
-    if (new Date(job.applicationDeadline) < new Date()) {
+    if (isJobWorkEnded(job, now)) {
+      return res.status(400).json({ success: false, message: 'The scheduled work time for this job has already passed.' });
+    }
+
+    if (isJobApplicationDeadlinePassed(job, now)) {
       return res.status(400).json({ success: false, message: 'The application deadline for this job has expired.' });
     }
 
@@ -53,7 +63,7 @@ export const applyToJob = async (req, res, next) => {
     }
 
     // Check schedule conflicts using true shift-interval overlap detection
-    const targetInterval = getShiftInterval(job.workDate, job.startTime, job.endTime);
+    const targetInterval = getShiftInterval(job.workDate, job.startTime, job.endTime, job.workEndDate);
 
     // Look for active assignments within ±2 days (to account for overnight shifts & timezone boundaries)
     const windowStart = new Date(job.workDate);
@@ -73,7 +83,8 @@ export const applyToJob = async (req, res, next) => {
           const assignedInterval = getShiftInterval(
             assignment.agreedSchedule.workDate,
             assignment.agreedSchedule.startTime,
-            assignment.agreedSchedule.endTime
+            assignment.agreedSchedule.endTime,
+            assignment.agreedSchedule.workEndDate
           );
 
           if (shiftsOverlap(targetInterval, assignedInterval)) {
@@ -313,6 +324,7 @@ export const updateApplicationStatus = async (req, res, next) => {
           application: application._id,
           agreedSchedule: {
             workDate: job.workDate,
+            workEndDate: job.workEndDate || job.workDate,
             startTime: job.startTime,
             endTime: job.endTime,
             totalHours: job.totalHours

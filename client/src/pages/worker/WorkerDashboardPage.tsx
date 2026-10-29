@@ -25,6 +25,7 @@ import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { formatPayWithBasis, formatINR } from '../../utils/currency';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
+import { isJobWorkEnded } from '../../utils/scheduleValidation';
 
 export const WorkerDashboardPage: React.FC = () => {
   const { user } = useAuth();
@@ -87,7 +88,8 @@ export const WorkerDashboardPage: React.FC = () => {
   ).length;
 
   const upcomingAssignments = assignments.filter((a) =>
-    ['CONFIRMED', 'IN_PROGRESS'].includes(a.status)
+    ['CONFIRMED', 'IN_PROGRESS'].includes(a.status) &&
+    !isJobWorkEnded(a.agreedSchedule || a.job)
   );
 
   return (

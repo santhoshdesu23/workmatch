@@ -5,12 +5,11 @@ import {
   Users,
   Calendar,
   Clock,
-  DollarSign,
   PlusCircle,
   AlertTriangle,
+  AlertCircle,
   ArrowRight,
   Edit3,
-  History,
   ShieldCheck,
   CheckCircle2
 } from 'lucide-react';
@@ -24,11 +23,35 @@ import { Modal } from '../../components/common/Modal';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { EmptyState } from '../../components/common/EmptyState';
 import { formatPayWithBasis } from '../../utils/currency';
+import {
+  validateJobSchedule,
+  getTodayDateString,
+  formatCalendarDate,
+  isJobApplicationDeadlinePassed,
+  isJobWorkEnded,
+  isJobWorkOngoing,
+  isJobOpenForApplications,
+  getEffectiveJobStatus
+} from '../../utils/scheduleValidation';
 
 export const EmployerJobsPage: React.FC = () => {
   const { success, error: toastError } = useToast();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filterTab, setFilterTab] = useState<'all' | 'open' | 'closed_apps' | 'ongoing' | 'past'>('all');
+
+  const getJobDisplayCategory = (job: Job) => {
+    if (job.status === 'CANCELLED') return 'cancelled';
+    if (job.status === 'COMPLETED' || (job.isWorkEnded ?? isJobWorkEnded(job))) return 'past';
+    if (job.isWorkOngoing ?? isJobWorkOngoing(job)) return 'ongoing';
+    if (job.isDeadlinePassed ?? isJobApplicationDeadlinePassed(job)) return 'closed_apps';
+    return 'open';
+  };
+
+  const filteredJobs = jobs.filter((job) => {
+    if (filterTab === 'all') return true;
+    return getJobDisplayCategory(job) === filterTab;
+  });
 
   // Cancellation Modal state
   const [cancellingJob, setCancellingJob] = useState<Job | null>(null);
@@ -40,6 +63,8 @@ export const EmployerJobsPage: React.FC = () => {
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editLocationName, setEditLocationName] = useState('');
+  const [editWorkDate, setEditWorkDate] = useState('');
+  const [editWorkEndDate, setEditWorkEndDate] = useState('');
   const [editStartTime, setEditStartTime] = useState('');
   const [editEndTime, setEditEndTime] = useState('');
   const [editGrossPay, setEditGrossPay] = useState<number>(0);
@@ -66,10 +91,14 @@ export const EmployerJobsPage: React.FC = () => {
   }, []);
 
   const openEditModal = (job: Job) => {
+    const startCal = formatCalendarDate(job.workDate);
+    const endCal = formatCalendarDate(job.workEndDate || job.workDate) || startCal;
     setEditingJob(job);
     setEditTitle(job.title);
     setEditDescription(job.description);
     setEditLocationName(job.locationName);
+    setEditWorkDate(startCal);
+    setEditWorkEndDate(endCal);
     setEditStartTime(job.startTime);
     setEditEndTime(job.endTime);
     setEditGrossPay(job.grossPay);
@@ -77,9 +106,30 @@ export const EmployerJobsPage: React.FC = () => {
     setEditReason('');
   };
 
+  const todayDateStr = getTodayDateString();
+  const effectiveEditEndDate = editWorkEndDate || editWorkDate;
+  const editScheduleValidation = validateJobSchedule({
+    workDate: editWorkDate,
+    workEndDate: effectiveEditEndDate,
+    startTime: editStartTime,
+    endTime: editEndTime
+  });
+
+  const handleEditWorkDateChange = (newStartDate: string) => {
+    setEditWorkDate(newStartDate);
+    if (!editWorkEndDate || editWorkEndDate === editWorkDate || (newStartDate && editWorkEndDate < newStartDate)) {
+      setEditWorkEndDate(newStartDate);
+    }
+  };
+
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingJob) return;
+
+    if (!editScheduleValidation.isValid) {
+      toastError(editScheduleValidation.error || 'Please provide a valid future work schedule.');
+      return;
+    }
 
     if (editGrossPay <= 0) {
       toastError('Gross pay must be greater than ₹0.');
@@ -93,7 +143,7 @@ export const EmployerJobsPage: React.FC = () => {
 
     setIsUpdating(true);
     try {
-      const res = await api.patch(`/jobs/${editingJob._id}`, {
+      const payload: Record<string, any> = {
         title: editTitle,
         description: editDescription,
         locationName: editLocationName,
@@ -102,7 +152,18 @@ export const EmployerJobsPage: React.FC = () => {
         grossPay: editGrossPay,
         openings: editOpenings,
         reason: editReason
-      });
+      };
+
+      const origStartCal = formatCalendarDate(editingJob.workDate);
+      const origEndCal = formatCalendarDate(editingJob.workEndDate || editingJob.workDate) || origStartCal;
+      if (editWorkDate !== origStartCal) {
+        payload.workDate = editWorkDate;
+      }
+      if (effectiveEditEndDate !== origEndCal || editWorkDate !== origStartCal) {
+        payload.workEndDate = effectiveEditEndDate;
+      }
+
+      const res = await api.patch(`/jobs/${editingJob._id}`, payload);
 
       if (res.data?.success) {
         success('Shift details updated. Changes recorded in public history.');
@@ -159,6 +220,60 @@ export const EmployerJobsPage: React.FC = () => {
         </Link>
       </div>
 
+      {/* Status Category Tabs */}
+      <div className="flex border-b border-slate-200 gap-3 text-xs sm:text-sm font-semibold overflow-x-auto pb-1">
+        <button
+          onClick={() => setFilterTab('all')}
+          className={`pb-2 border-b-2 cursor-pointer whitespace-nowrap transition-colors ${
+            filterTab === 'all'
+              ? 'border-emerald-600 text-emerald-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          All Postings ({jobs.length})
+        </button>
+        <button
+          onClick={() => setFilterTab('open')}
+          className={`pb-2 border-b-2 cursor-pointer whitespace-nowrap transition-colors ${
+            filterTab === 'open'
+              ? 'border-emerald-600 text-emerald-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          Open for Applications ({jobs.filter((j) => getJobDisplayCategory(j) === 'open').length})
+        </button>
+        <button
+          onClick={() => setFilterTab('closed_apps')}
+          className={`pb-2 border-b-2 cursor-pointer whitespace-nowrap transition-colors ${
+            filterTab === 'closed_apps'
+              ? 'border-emerald-600 text-emerald-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          Applications Closed ({jobs.filter((j) => getJobDisplayCategory(j) === 'closed_apps').length})
+        </button>
+        <button
+          onClick={() => setFilterTab('ongoing')}
+          className={`pb-2 border-b-2 cursor-pointer whitespace-nowrap transition-colors ${
+            filterTab === 'ongoing'
+              ? 'border-emerald-600 text-emerald-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          Ongoing Shifts ({jobs.filter((j) => getJobDisplayCategory(j) === 'ongoing').length})
+        </button>
+        <button
+          onClick={() => setFilterTab('past')}
+          className={`pb-2 border-b-2 cursor-pointer whitespace-nowrap transition-colors ${
+            filterTab === 'past'
+              ? 'border-emerald-600 text-emerald-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          Past Work ({jobs.filter((j) => getJobDisplayCategory(j) === 'past').length})
+        </button>
+      </div>
+
       {jobs.length === 0 ? (
         <EmptyState
           icon={Briefcase}
@@ -167,26 +282,35 @@ export const EmployerJobsPage: React.FC = () => {
           actionText="Create a Shift"
           onAction={() => (window.location.href = '/employer/jobs/create')}
         />
+      ) : filteredJobs.length === 0 ? (
+        <EmptyState
+          icon={Briefcase}
+          title="No shifts in this view"
+          description="Select another category above or publish a new shift."
+        />
       ) : (
         <div className="space-y-4">
-          {jobs.map((job) => (
+          {filteredJobs.map((job) => (
             <Card key={job._id} className="p-6 space-y-4">
               <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
                 <div className="space-y-1.5 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="emerald" size="sm">{job.category}</Badge>
-                    <Badge
-                      variant={
-                        job.status === 'OPEN'
-                          ? 'blue'
-                          : job.status === 'FILLED'
-                          ? 'emerald'
-                          : 'slate'
-                      }
-                      size="sm"
-                    >
-                      {job.status}
-                    </Badge>
+                    {job.status === 'CANCELLED' ? (
+                      <Badge variant="rose" size="sm">Cancelled</Badge>
+                    ) : job.status === 'COMPLETED' ? (
+                      <Badge variant="emerald" size="sm">Completed</Badge>
+                    ) : (job.isWorkEnded ?? isJobWorkEnded(job)) ? (
+                      <Badge variant="slate" size="sm">Shift Ended</Badge>
+                    ) : (job.isWorkOngoing ?? isJobWorkOngoing(job)) ? (
+                      <Badge variant="amber" size="sm">Shift In Progress</Badge>
+                    ) : job.filledCount >= job.openings ? (
+                      <Badge variant="slate" size="sm">Filled</Badge>
+                    ) : (job.isDeadlinePassed ?? isJobApplicationDeadlinePassed(job)) ? (
+                      <Badge variant="amber" size="sm">Applications Closed</Badge>
+                    ) : (
+                      <Badge variant="blue" size="sm">Open for Applications</Badge>
+                    )}
                     {job.detailsConfirmed && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full">
                         <CheckCircle2 className="w-3 h-3 text-emerald-600" />
@@ -200,7 +324,9 @@ export const EmployerJobsPage: React.FC = () => {
                   <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
                     <div className="flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{new Date(job.workDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                      <span>
+                        {new Date(job.workDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-1.5">
@@ -305,27 +431,95 @@ export const EmployerJobsPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Start Time</label>
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-slate-700">Work Start Date</label>
+              <input
+                type="date"
+                required
+                min={todayDateStr}
+                value={editWorkDate}
+                onChange={(e) => handleEditWorkDateChange(e.target.value)}
+                className={`w-full text-xs p-2.5 border rounded-xl focus:outline-none ${
+                  editScheduleValidation.errors.workDate
+                    ? 'border-rose-400 bg-rose-50/20'
+                    : 'border-slate-200'
+                }`}
+              />
+              {editScheduleValidation.errors.workDate && (
+                <p role="alert" className="text-[11px] text-rose-600 font-medium">
+                  {editScheduleValidation.errors.workDate}
+                </p>
+              )}
+            </div>
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-slate-700">Start Time</label>
               <input
                 type="time"
                 required
                 value={editStartTime}
                 onChange={(e) => setEditStartTime(e.target.value)}
-                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+                className={`w-full text-xs p-2.5 border rounded-xl focus:outline-none ${
+                  editScheduleValidation.errors.startTime
+                    ? 'border-rose-400 bg-rose-50/20'
+                    : 'border-slate-200'
+                }`}
               />
+              {editScheduleValidation.errors.startTime && (
+                <p role="alert" className="text-[11px] text-rose-600 font-medium">
+                  {editScheduleValidation.errors.startTime}
+                </p>
+              )}
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">End Time</label>
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-slate-700">Work End Date</label>
+              <input
+                type="date"
+                required
+                min={editWorkDate || todayDateStr}
+                value={effectiveEditEndDate}
+                onChange={(e) => setEditWorkEndDate(e.target.value)}
+                className={`w-full text-xs p-2.5 border rounded-xl focus:outline-none ${
+                  editScheduleValidation.errors.workEndDate
+                    ? 'border-rose-400 bg-rose-50/20'
+                    : 'border-slate-200'
+                }`}
+              />
+              {editScheduleValidation.errors.workEndDate && (
+                <p role="alert" className="text-[11px] text-rose-600 font-medium">
+                  {editScheduleValidation.errors.workEndDate}
+                </p>
+              )}
+            </div>
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-slate-700">End Time</label>
               <input
                 type="time"
                 required
                 value={editEndTime}
                 onChange={(e) => setEditEndTime(e.target.value)}
-                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+                className={`w-full text-xs p-2.5 border rounded-xl focus:outline-none ${
+                  editScheduleValidation.errors.endTime
+                    ? 'border-rose-400 bg-rose-50/20'
+                    : 'border-slate-200'
+                }`}
               />
+              {editScheduleValidation.errors.endTime && (
+                <p role="alert" className="text-[11px] text-rose-600 font-medium">
+                  {editScheduleValidation.errors.endTime}
+                </p>
+              )}
             </div>
           </div>
+
+          {!editScheduleValidation.isValid && editScheduleValidation.error && (
+            <div
+              role="alert"
+              className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2"
+            >
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span>{editScheduleValidation.error}</span>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -380,7 +574,12 @@ export const EmployerJobsPage: React.FC = () => {
             <Button variant="ghost" size="sm" type="button" onClick={() => setEditingJob(null)}>
               Cancel
             </Button>
-            <Button size="sm" type="submit" isLoading={isUpdating}>
+            <Button
+              size="sm"
+              type="submit"
+              disabled={!editScheduleValidation.isValid}
+              isLoading={isUpdating}
+            >
               Save & Notify Applicants
             </Button>
           </div>

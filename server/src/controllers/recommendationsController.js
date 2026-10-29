@@ -4,6 +4,13 @@ import { EmployerProfile } from '../models/EmployerProfile.js';
 import { JOB_STATUSES, ROLES } from '../config/constants.js';
 import { computeJobMatch, sanitizeSkills } from '../services/matchingService.js';
 import { aiExplanationService } from '../services/aiExplanationService.js';
+import {
+  isJobOpenForApplications,
+  isJobApplicationDeadlinePassed,
+  isJobWorkEnded,
+  isJobWorkOngoing,
+  getEffectiveJobStatus
+} from '../utils/scheduleUtils.js';
 
 export const getJobRecommendations = async (req, res, next) => {
   try {
@@ -44,17 +51,25 @@ export const getJobRecommendations = async (req, res, next) => {
       .populate('employer', 'name email verificationStatus')
       .lean();
 
-    const employerIds = openJobs.map((j) => j.employer?._id).filter(Boolean);
+    const now = new Date();
+    // Exclude jobs whose application deadline has passed or whose scheduled work has ended
+    const availableJobs = openJobs.filter((job) => isJobOpenForApplications(job, now));
+
+    const employerIds = availableJobs.map((j) => j.employer?._id).filter(Boolean);
     const employerProfiles = await EmployerProfile.find({ user: { $in: employerIds } }).lean();
     const empProfileMap = new Map();
     employerProfiles.forEach((p) => empProfileMap.set(p.user.toString(), p));
 
-    const scoredJobs = openJobs.map((job) => {
+    const scoredJobs = availableJobs.map((job) => {
       const matchResult = computeJobMatch(workerProfile, job);
       const empProf = empProfileMap.get(job.employer?._id?.toString());
 
       return {
         ...job,
+        isDeadlinePassed: isJobApplicationDeadlinePassed(job, now),
+        isWorkEnded: isJobWorkEnded(job, now),
+        isWorkOngoing: isJobWorkOngoing(job, now),
+        effectiveStatus: getEffectiveJobStatus(job, now),
         employerProfile: empProf
           ? {
               businessName: empProf.businessName,

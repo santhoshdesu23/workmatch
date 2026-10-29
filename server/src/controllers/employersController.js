@@ -7,6 +7,13 @@ import { User } from '../models/User.js';
 import { JOB_STATUSES, APPLICATION_STATUSES, ASSIGNMENT_STATUSES, PAYMENT_STATUSES } from '../config/constants.js';
 import { computeEmployerReliability } from '../services/reliabilityService.js';
 import { validateNameField } from '../utils/nameValidator.js';
+import {
+  isJobOpenForApplications,
+  isJobApplicationDeadlinePassed,
+  isJobWorkEnded,
+  isJobWorkOngoing,
+  getEffectiveJobStatus
+} from '../utils/scheduleUtils.js';
 
 export const getMyEmployerProfile = async (req, res, next) => {
   try {
@@ -131,9 +138,18 @@ export const getEmployerJobs = async (req, res, next) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    const now = new Date();
+    const enriched = jobs.map((job) => ({
+      ...job,
+      isDeadlinePassed: isJobApplicationDeadlinePassed(job, now),
+      isWorkEnded: isJobWorkEnded(job, now),
+      isWorkOngoing: isJobWorkOngoing(job, now),
+      effectiveStatus: getEffectiveJobStatus(job, now)
+    }));
+
     res.status(200).json({
       success: true,
-      jobs
+      jobs: enriched
     });
   } catch (error) {
     next(error);
@@ -144,23 +160,50 @@ export const getEmployerDashboard = async (req, res, next) => {
   try {
     const employerId = req.user._id;
 
+    const allJobs = await Job.find({ employer: employerId })
+      .select('_id title status workDate workEndDate startTime endTime grossPay openings filledCount applicationDeadline')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const now = new Date();
+    const enrichedJobs = allJobs.map((job) => ({
+      ...job,
+      isDeadlinePassed: isJobApplicationDeadlinePassed(job, now),
+      isWorkEnded: isJobWorkEnded(job, now),
+      isWorkOngoing: isJobWorkOngoing(job, now),
+      effectiveStatus: getEffectiveJobStatus(job, now)
+    }));
+
+    const openJobs = enrichedJobs.filter((j) => isJobOpenForApplications(j, now));
+    const closedApplicationsJobs = enrichedJobs.filter(
+      (j) => j.status === JOB_STATUSES.OPEN && j.isDeadlinePassed && !j.isWorkEnded
+    );
+    const ongoingJobs = enrichedJobs.filter((j) => j.isWorkOngoing);
+    const upcomingJobs = enrichedJobs.filter(
+      (j) => !j.isWorkEnded && !j.isWorkOngoing && j.status !== JOB_STATUSES.CANCELLED
+    );
+    const pastJobs = enrichedJobs.filter(
+      (j) => j.isWorkEnded || j.status === JOB_STATUSES.COMPLETED
+    );
+
+    // Active jobs: jobs that are open for applications or have upcoming/in-progress shifts
+    const activeJobsCount = enrichedJobs.filter(
+      (j) => j.status !== JOB_STATUSES.CANCELLED && j.status !== JOB_STATUSES.COMPLETED && !j.isWorkEnded
+    ).length;
+
     // Compute live metrics from verified database records
     const [
-      activeJobsCount,
-      allJobs,
       totalApplicationsCount,
       shortlistedCount,
       confirmedAssignmentsCount,
       pendingPaymentsCount,
       recentApplications
     ] = await Promise.all([
-      Job.countDocuments({ employer: employerId, status: JOB_STATUSES.OPEN }),
-      Job.find({ employer: employerId }).select('_id title status workDate grossPay openings filledCount').lean(),
       Application.countDocuments({
-        job: { $in: await Job.find({ employer: employerId }).distinct('_id') }
+        job: { $in: allJobs.map((j) => j._id) }
       }),
       Application.countDocuments({
-        job: { $in: await Job.find({ employer: employerId }).distinct('_id') },
+        job: { $in: allJobs.map((j) => j._id) },
         status: APPLICATION_STATUSES.SHORTLISTED
       }),
       Assignment.countDocuments({
@@ -172,7 +215,7 @@ export const getEmployerDashboard = async (req, res, next) => {
         status: { $in: [PAYMENT_STATUSES.DUE, PAYMENT_STATUSES.PROCESSING] }
       }),
       Application.find({
-        job: { $in: await Job.find({ employer: employerId }).distinct('_id') }
+        job: { $in: allJobs.map((j) => j._id) }
       })
         .populate('worker', 'name email')
         .populate('job', 'title workDate grossPay')
@@ -185,13 +228,18 @@ export const getEmployerDashboard = async (req, res, next) => {
       success: true,
       metrics: {
         activeJobsCount,
+        openJobsCount: openJobs.length,
+        closedApplicationsCount: closedApplicationsJobs.length,
+        ongoingJobsCount: ongoingJobs.length,
+        upcomingJobsCount: upcomingJobs.length,
+        pastJobsCount: pastJobs.length,
         totalJobsCount: allJobs.length,
         totalApplicationsCount,
         shortlistedCount,
         confirmedAssignmentsCount,
         pendingPaymentsCount
       },
-      jobs: allJobs,
+      jobs: enrichedJobs,
       recentApplications
     });
   } catch (error) {
@@ -211,4 +259,3 @@ export const getEmployerReliabilityHandler = async (req, res, next) => {
     next(error);
   }
 };
-

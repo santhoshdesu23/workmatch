@@ -2,6 +2,12 @@ import { WorkerProfile } from '../models/WorkerProfile.js';
 import { Job } from '../models/Job.js';
 import { User } from '../models/User.js';
 import { validateNameField } from '../utils/nameValidator.js';
+import {
+  isJobApplicationDeadlinePassed,
+  isJobWorkEnded,
+  isJobWorkOngoing,
+  getEffectiveJobStatus
+} from '../utils/scheduleUtils.js';
 
 export const getMyWorkerProfile = async (req, res, next) => {
   try {
@@ -156,9 +162,24 @@ export const getSavedJobs = async (req, res, next) => {
       populate: { path: 'employer', select: 'name email' }
     });
 
+    const now = new Date();
+    const rawSaved = profile?.savedJobs || [];
+    const savedJobs = rawSaved
+      .filter((j) => j && typeof j === 'object')
+      .map((job) => {
+        const leanJob = typeof job.toObject === 'function' ? job.toObject() : job;
+        return {
+          ...leanJob,
+          isDeadlinePassed: isJobApplicationDeadlinePassed(leanJob, now),
+          isWorkEnded: isJobWorkEnded(leanJob, now),
+          isWorkOngoing: isJobWorkOngoing(leanJob, now),
+          effectiveStatus: getEffectiveJobStatus(leanJob, now)
+        };
+      });
+
     res.status(200).json({
       success: true,
-      savedJobs: profile?.savedJobs || []
+      savedJobs
     });
   } catch (error) {
     next(error);

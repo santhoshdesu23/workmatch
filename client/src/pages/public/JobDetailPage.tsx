@@ -32,6 +32,12 @@ import { formatPayWithBasis, formatINR } from '../../utils/currency';
 import { Modal } from '../../components/common/Modal';
 import { ScoreBreakdown } from '../../components/common/ScoreBreakdown';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
+import {
+  isJobApplicationDeadlinePassed,
+  isJobWorkEnded,
+  isJobWorkOngoing,
+  getEffectiveJobStatus
+} from '../../utils/scheduleValidation';
 
 export const JobDetailPage: React.FC = () => {
   const { jobId } = useParams<{ jobId: string }>();
@@ -239,10 +245,13 @@ export const JobDetailPage: React.FC = () => {
     );
   }
 
-  const isDeadlinePassed = new Date(job.applicationDeadline) < new Date();
-  const isFilled = job.filledCount >= job.openings;
+  const isWorkEnded = job ? isJobWorkEnded(job) : false;
+  const _isWorkOngoing = job ? isJobWorkOngoing(job) : false;
+  const isDeadlinePassed = job ? isJobApplicationDeadlinePassed(job) : false;
+  const isFilled = job ? job.filledCount >= job.openings : false;
+  const effectiveStatus = job ? getEffectiveJobStatus(job) : 'OPEN';
 
-  const reliability: EmployerReliability | undefined = job.employerReliability;
+  const reliability: EmployerReliability | undefined = job?.employerReliability;
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -259,7 +268,21 @@ export const JobDetailPage: React.FC = () => {
           <div className="space-y-2 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="emerald">{job.category}</Badge>
-              <Badge variant={job.status === 'OPEN' ? 'blue' : 'slate'}>{job.status}</Badge>
+              {effectiveStatus === 'CANCELLED' ? (
+                <Badge variant="rose">CANCELLED</Badge>
+              ) : effectiveStatus === 'COMPLETED' ? (
+                <Badge variant="emerald">COMPLETED</Badge>
+              ) : effectiveStatus === 'WORK_ENDED' ? (
+                <Badge variant="slate">Shift Ended</Badge>
+              ) : effectiveStatus === 'IN_PROGRESS' ? (
+                <Badge variant="amber">Shift In Progress</Badge>
+              ) : effectiveStatus === 'FILLED' ? (
+                <Badge variant="slate">Filled</Badge>
+              ) : effectiveStatus === 'APPLICATIONS_CLOSED' ? (
+                <Badge variant="amber">Applications Closed</Badge>
+              ) : (
+                <Badge variant="blue">OPEN</Badge>
+              )}
 
               {/* TrustTrack Confirmation Badge */}
               {job.detailsConfirmed ? (
@@ -323,13 +346,21 @@ export const JobDetailPage: React.FC = () => {
                 <CheckCircle2 className="w-4 h-4 text-sky-600" />
                 <span>You applied for this shift (Status: {job.userApplication.status})</span>
               </div>
+            ) : job.status === 'CANCELLED' ? (
+              <div className="p-2.5 px-4 rounded-xl bg-slate-100 text-slate-600 text-xs font-semibold">
+                This job posting has been cancelled
+              </div>
+            ) : isWorkEnded ? (
+              <div className="p-2.5 px-4 rounded-xl bg-slate-100 text-slate-600 text-xs font-semibold">
+                The scheduled work time for this shift has ended
+              </div>
             ) : isFilled ? (
               <div className="p-2.5 px-4 rounded-xl bg-slate-100 text-slate-600 text-xs font-semibold">
                 All openings for this shift are filled
               </div>
             ) : isDeadlinePassed ? (
-              <div className="p-2.5 px-4 rounded-xl bg-slate-100 text-slate-600 text-xs font-semibold">
-                Application deadline has expired
+              <div className="p-2.5 px-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold">
+                Applications closed (deadline expired)
               </div>
             ) : (
               <Button
