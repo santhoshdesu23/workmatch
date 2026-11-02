@@ -25,6 +25,12 @@ export const Navbar: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
+  // Ensure mobile drawer and user menu close automatically on any route navigation
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+    setIsUserMenuOpen(false);
+  }, [location.pathname]);
+
   useEffect(() => {
     if (user) {
       api.get('/notifications')
@@ -38,12 +44,16 @@ export const Navbar: React.FC = () => {
   }, [user, location.pathname]);
 
   const handleLogout = () => {
+    setIsMobileMenuOpen(false);
+    setIsUserMenuOpen(false);
     logout();
     info('You have been logged out.');
     navigate('/');
   };
 
   const handleDemoSwitch = async (role: 'worker' | 'worker2' | 'employer' | 'admin') => {
+    setIsMobileMenuOpen(false);
+    setIsUserMenuOpen(false);
     await demoLogin(role);
     info(`Switched to demo ${role} account!`);
     if (role === 'worker' || role === 'worker2') navigate('/worker/dashboard');
@@ -332,31 +342,93 @@ export const Navbar: React.FC = () => {
                   Logged in as <span className="text-slate-800 normal-case font-bold">{user.name}</span> ({user.role})
                 </div>
                 {user.role === 'worker' && (
-                  <Link
-                    to="/worker/dashboard"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="block text-sm font-medium text-emerald-600 py-1"
-                  >
-                    Worker Dashboard
-                  </Link>
+                  <>
+                    <Link
+                      to="/worker/dashboard"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block text-sm font-medium text-emerald-600 py-1"
+                    >
+                      Worker Dashboard
+                    </Link>
+                    <Link
+                      to="/worker/recommendations"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block text-sm font-medium text-slate-700 py-1"
+                    >
+                      AI Matches
+                    </Link>
+                    <Link
+                      to="/worker/applications"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block text-sm font-medium text-slate-700 py-1"
+                    >
+                      My Applications
+                    </Link>
+                    <Link
+                      to="/worker/profile"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block text-sm font-medium text-slate-700 py-1"
+                    >
+                      Worker Profile
+                    </Link>
+                  </>
                 )}
                 {user.role === 'employer' && (
-                  <Link
-                    to="/employer/dashboard"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="block text-sm font-medium text-emerald-600 py-1"
-                  >
-                    Employer Dashboard
-                  </Link>
+                  <>
+                    <Link
+                      to="/employer/dashboard"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block text-sm font-medium text-emerald-600 py-1"
+                    >
+                      Employer Dashboard
+                    </Link>
+                    <Link
+                      to="/employer/jobs/create"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block text-sm font-medium text-slate-700 py-1"
+                    >
+                      Post Shift
+                    </Link>
+                    <Link
+                      to="/employer/jobs"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block text-sm font-medium text-slate-700 py-1"
+                    >
+                      My Postings
+                    </Link>
+                    <Link
+                      to="/employer/profile"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block text-sm font-medium text-slate-700 py-1"
+                    >
+                      Business Profile
+                    </Link>
+                  </>
                 )}
                 {user.role === 'admin' && (
-                  <Link
-                    to="/admin/dashboard"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="block text-sm font-medium text-amber-600 py-1"
-                  >
-                    Admin Dashboard
-                  </Link>
+                  <>
+                    <Link
+                      to="/admin/dashboard"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block text-sm font-medium text-amber-600 py-1"
+                    >
+                      Admin Dashboard
+                    </Link>
+                    <Link
+                      to="/admin/users"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block text-sm font-medium text-slate-700 py-1"
+                    >
+                      User Management
+                    </Link>
+                    <Link
+                      to="/admin/reports"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block text-sm font-medium text-slate-700 py-1"
+                    >
+                      Reports & Moderation
+                    </Link>
+                  </>
                 )}
                 <button
                   onClick={handleLogout}

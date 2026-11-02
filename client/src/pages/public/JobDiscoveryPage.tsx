@@ -28,9 +28,14 @@ import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { JobMap } from '../../components/common/JobMap';
 import { formatPayWithBasis } from '../../utils/currency';
 import { buildJobSearchParams } from '../../utils/jobSearchParams.js';
+import {
+  resolveNlFilters,
+  resolveNlFallbackFilters,
+  JobFilterState
+} from '../../utils/nlSearchUtils.js';
 
 // Feature flag: set to true to restore the natural language AI conversational search banner
-const SHOW_AI_SEARCH_BANNER = false;
+const SHOW_AI_SEARCH_BANNER = true;
 
 export const JobDiscoveryPage: React.FC = () => {
   const { user } = useAuth();
@@ -73,21 +78,26 @@ export const JobDiscoveryPage: React.FC = () => {
   const [nlQuery, setNlQuery] = useState<string>('');
   const [isNlSearching, setIsNlSearching] = useState<boolean>(false);
 
-  const fetchJobs = async () => {
+  const lastFetchedParamsRef = React.useRef<string>('');
+
+  const fetchJobs = async (filterOverrides?: Partial<JobFilterState>) => {
     setLoading(true);
     setSearchError('');
     try {
-      const params = buildJobSearchParams({
-        search,
-        category,
-        minPay,
-        workDate,
-        maxDistanceKm,
-        sort,
-        location: locationQuery,
-        locality: selectedLocality,
-        coordinates: userCoords
-      });
+      const activeFilters: JobFilterState = {
+        search: filterOverrides?.search !== undefined ? filterOverrides.search : search,
+        category: filterOverrides?.category !== undefined ? filterOverrides.category : category,
+        minPay: filterOverrides?.minPay !== undefined ? filterOverrides.minPay : minPay,
+        workDate: filterOverrides?.workDate !== undefined ? filterOverrides.workDate : workDate,
+        maxDistanceKm: filterOverrides?.maxDistanceKm !== undefined ? filterOverrides.maxDistanceKm : maxDistanceKm,
+        sort: filterOverrides?.sort !== undefined ? filterOverrides.sort : sort,
+        location: filterOverrides?.location !== undefined ? filterOverrides.location : locationQuery,
+        locality: filterOverrides?.locality !== undefined ? filterOverrides.locality : selectedLocality,
+        coordinates: filterOverrides?.coordinates !== undefined ? filterOverrides.coordinates : userCoords
+      };
+
+      const params = buildJobSearchParams(activeFilters);
+      lastFetchedParamsRef.current = params.toString();
 
       const res = await api.get(`/jobs?${params.toString()}`);
       if (res.data?.success) {
@@ -103,6 +113,23 @@ export const JobDiscoveryPage: React.FC = () => {
   };
 
   useEffect(() => {
+    const currentParams = buildJobSearchParams({
+      search,
+      category,
+      minPay,
+      workDate,
+      maxDistanceKm,
+      sort,
+      location: locationQuery,
+      locality: selectedLocality,
+      coordinates: userCoords
+    }).toString();
+
+    // Prevent duplicate API requests if already fetched (e.g. by handleNlSearch)
+    if (currentParams === lastFetchedParamsRef.current) {
+      return;
+    }
+
     fetchJobs();
   }, [category, minPay, workDate, maxDistanceKm, sort, selectedLocality, userCoords]);
 
@@ -113,31 +140,79 @@ export const JobDiscoveryPage: React.FC = () => {
 
   const handleNlSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nlQuery.trim()) return;
+    const query = nlQuery.trim();
+    if (!query) return;
 
     setIsNlSearching(true);
+    let targetFilters: JobFilterState;
+
     try {
-      const res = await api.post('/recommendations/nl-search', { query: nlQuery });
+      const res = await api.post('/recommendations/nl-search', { query });
       if (res.data?.success && res.data?.parsed) {
         const parsed = res.data.parsed;
-        if (parsed.keyword) setSearch(parsed.keyword);
-        if (parsed.category) setCategory(parsed.category);
-        if (parsed.minPay) setMinPay(String(parsed.minPay));
-        if (parsed.maxDistanceKm) setMaxDistanceKm(String(parsed.maxDistanceKm));
-        if (parsed.locality) {
-          setSelectedLocality(parsed.locality);
-          const found = LOCALITY_PRESETS.find(p => p.locality.toLowerCase() === parsed.locality.toLowerCase());
-          if (found?.coords) setUserCoords(found.coords);
-        }
+        targetFilters = resolveNlFilters(
+          {
+            search,
+            category,
+            minPay,
+            workDate,
+            maxDistanceKm,
+            sort,
+            location: locationQuery,
+            locality: selectedLocality,
+            coordinates: userCoords
+          },
+          parsed,
+          LOCALITY_PRESETS
+        );
         info(`Natural language query parsed via ${parsed.source || 'AI engine'}!`);
+      } else {
+        targetFilters = resolveNlFallbackFilters(
+          {
+            search,
+            category,
+            minPay,
+            workDate,
+            maxDistanceKm,
+            sort,
+            location: locationQuery,
+            locality: selectedLocality,
+            coordinates: userCoords
+          },
+          query
+        );
       }
-    } catch (err: any) {
-      // Fallback search
-      setSearch(nlQuery);
+    } catch {
+      // Fallback search on parsing or network failure
+      targetFilters = resolveNlFallbackFilters(
+        {
+          search,
+          category,
+          minPay,
+          workDate,
+          maxDistanceKm,
+          sort,
+          location: locationQuery,
+          locality: selectedLocality,
+          coordinates: userCoords
+        },
+        query
+      );
     } finally {
       setIsNlSearching(false);
-      fetchJobs();
     }
+
+    // Apply resolved filters to state
+    if (targetFilters.search !== undefined) setSearch(targetFilters.search);
+    if (targetFilters.category !== undefined) setCategory(targetFilters.category);
+    if (targetFilters.minPay !== undefined) setMinPay(targetFilters.minPay);
+    if (targetFilters.maxDistanceKm !== undefined) setMaxDistanceKm(targetFilters.maxDistanceKm);
+    if (targetFilters.locality !== undefined) setSelectedLocality(targetFilters.locality);
+    if (targetFilters.location !== undefined) setLocationQuery(targetFilters.location);
+    if (targetFilters.coordinates !== undefined) setUserCoords(targetFilters.coordinates);
+
+    // Fetch immediately using fresh target filters to eliminate stale state
+    await fetchJobs(targetFilters);
   };
 
   const handleUseDeviceLocation = () => {

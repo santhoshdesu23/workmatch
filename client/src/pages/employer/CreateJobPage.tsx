@@ -21,6 +21,10 @@ import {
   getTodayDateString,
   formatCalendarDate
 } from '../../utils/scheduleValidation';
+import {
+  sanitizeJobCoordinates,
+  validateJobLocation
+} from '../../utils/locationValidation.js';
 
 export const CreateJobPage: React.FC = () => {
   const navigate = useNavigate();
@@ -59,7 +63,8 @@ export const CreateJobPage: React.FC = () => {
 
   // Step 2: Location & Schedule
   const [locationName, setLocationName] = useState('');
-  const [coordinates, setCoordinates] = useState<[number, number]>([-73.9851, 40.7484]); // Default NYC Midtown
+  const [coordinates, setCoordinates] = useState<[number, number] | null>(null);
+  const [isLocating, setIsLocating] = useState<boolean>(false);
   const [workDate, setWorkDate] = useState('');
   const [workEndDate, setWorkEndDate] = useState('');
   const [startTime, setStartTime] = useState('09:00');
@@ -154,15 +159,22 @@ export const CreateJobPage: React.FC = () => {
       toastError('Geolocation not supported in browser.');
       return;
     }
+    setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        setIsLocating(false);
         setCoordinates([pos.coords.longitude, pos.coords.latitude]);
         if (!locationName) {
           setLocationName(`Current Business GPS (${pos.coords.latitude.toFixed(3)}, ${pos.coords.longitude.toFixed(3)})`);
         }
         success('Coordinates fetched from device.');
       },
-      (err) => toastError(err.message)
+      (err) => {
+        setIsLocating(false);
+        // Ensure GPS failure does not leave misleading or stale coordinates
+        setCoordinates(null);
+        toastError(err.message || 'Unable to retrieve GPS coordinates.');
+      }
     );
   };
 
@@ -191,8 +203,10 @@ export const CreateJobPage: React.FC = () => {
       }
     } else if (step === 2) {
       setScheduleTouched(true);
-      if (!locationName.trim()) {
-        toastError('Please specify the work address or venue location.');
+      const locValidation = validateJobLocation(locationName, coordinates);
+      if (!locValidation.isValid) {
+        const firstErr = locValidation.errors.locationName || locValidation.errors.coordinates;
+        toastError(firstErr);
         return false;
       }
       const currentScheduleCheck = validateJobSchedule({
@@ -269,13 +283,14 @@ export const CreateJobPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       const skillsArray = requiredSkills.split(',').map((s) => s.trim()).filter(Boolean);
+      const sanitizedCoordinates = sanitizeJobCoordinates(coordinates);
 
       const res = await api.post('/jobs', {
         title,
         description,
         category: resolvedCategory,
-        locationName,
-        coordinates,
+        locationName: locationName.trim(),
+        coordinates: sanitizedCoordinates,
         workDate,
         workEndDate: workEndDate || workDate,
         startTime,
@@ -439,12 +454,57 @@ export const CreateJobPage: React.FC = () => {
                 required
                 value={locationName}
                 onChange={(e) => setLocationName(e.target.value)}
-                placeholder="e.g. Javits Center, 429 11th Ave, New York, NY"
+                placeholder="e.g. Sanjay Ghodawat Institute, Atigre, Kolhapur or Bandra Kurla Complex, Mumbai"
                 className="flex-1 text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
-              <Button type="button" variant="outline" size="sm" onClick={handleUseBrowserGPS} leftIcon={<Navigation className="w-3.5 h-3.5" />}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleUseBrowserGPS}
+                isLoading={isLocating}
+                leftIcon={<Navigation className="w-3.5 h-3.5" />}
+              >
                 GPS
               </Button>
+            </div>
+            {coordinates ? (
+              <div className="flex items-center justify-between text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg mt-1.5">
+                <span>GPS Coordinates pinned: {coordinates[1].toFixed(4)}°N, {coordinates[0].toFixed(4)}°E</span>
+                <button
+                  type="button"
+                  onClick={() => setCoordinates(null)}
+                  className="text-emerald-700 hover:text-emerald-900 font-semibold cursor-pointer underline text-[10px]"
+                >
+                  Clear GPS
+                </button>
+              </div>
+            ) : (
+              <p className="text-[10px] text-slate-400 mt-1">
+                Venue address is required. Coordinates are optional — click GPS to pin device location or select a preset.
+              </p>
+            )}
+            <div className="flex items-center gap-1.5 flex-wrap mt-2">
+              <span className="text-[11px] text-slate-400 font-medium">Quick Presets:</span>
+              {[
+                { name: 'Atigre', coords: [74.3720, 16.7410] as [number, number] },
+                { name: 'Hatkanangale', coords: [74.4442, 16.7445] as [number, number] },
+                { name: 'Shiroli MIDC', coords: [74.3015, 16.7482] as [number, number] },
+                { name: 'Ichalkaranji', coords: [74.4620, 16.6960] as [number, number] },
+                { name: 'Kolhapur City', coords: [74.2430, 16.7050] as [number, number] }
+              ].map((p) => (
+                <button
+                  key={p.name}
+                  type="button"
+                  onClick={() => {
+                    setLocationName(p.name);
+                    setCoordinates(p.coords);
+                  }}
+                  className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 border border-slate-200 transition-colors cursor-pointer"
+                >
+                  {p.name}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -801,7 +861,16 @@ export const CreateJobPage: React.FC = () => {
             )}
 
             <div className="text-xs space-y-1 text-slate-600">
-              <div><strong>Location:</strong> {locationName}</div>
+              <div>
+                <strong>Location:</strong> {locationName}{' '}
+                {coordinates ? (
+                  <span className="text-emerald-700 font-medium">
+                    (GPS Pinned: {coordinates[1].toFixed(4)}°N, {coordinates[0].toFixed(4)}°E)
+                  </span>
+                ) : (
+                  <span className="text-slate-400">(Address text only)</span>
+                )}
+              </div>
               <div><strong>Required Skills:</strong> {requiredSkills}</div>
               <div><strong>Dress Code:</strong> {dressCode}</div>
               <div><strong>Payment Terms:</strong> {paymentMethod} ({paymentTiming})</div>

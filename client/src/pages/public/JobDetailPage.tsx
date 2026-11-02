@@ -18,6 +18,7 @@ import {
   History,
   HelpCircle,
   AlertTriangle,
+  AlertCircle,
   CheckCheck,
   Info
 } from 'lucide-react';
@@ -47,6 +48,8 @@ export const JobDetailPage: React.FC = () => {
 
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const latestRequestIdRef = React.useRef<number>(0);
 
   // Application Modal state
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
@@ -93,17 +96,32 @@ export const JobDetailPage: React.FC = () => {
     }
   };
 
-  const fetchJob = async () => {
-    setLoading(true);
+  const fetchJob = async (showLoadingState = false) => {
+    if (!jobId) return;
+    const currentRequestId = ++latestRequestIdRef.current;
+    if (showLoadingState) {
+      setLoading(true);
+    }
     try {
       const res = await api.get(`/jobs/${jobId}`);
-      if (res.data?.success) {
+      if (currentRequestId !== latestRequestIdRef.current) return;
+      if (res.data?.success && res.data.job) {
         setJob(res.data.job);
+        setErrorMessage(null);
+      } else {
+        setJob(null);
+        setErrorMessage(res.data?.message || 'Job posting not found.');
       }
     } catch (err: any) {
-      toastError(err.message || 'Job posting not found.');
+      if (currentRequestId !== latestRequestIdRef.current) return;
+      setJob(null);
+      const msg = err.response?.data?.message || err.message || 'Job posting not found.';
+      setErrorMessage(msg);
+      toastError(msg);
     } finally {
-      setLoading(false);
+      if (currentRequestId === latestRequestIdRef.current && showLoadingState) {
+        setLoading(false);
+      }
     }
   };
 
@@ -127,7 +145,48 @@ export const JobDetailPage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (jobId) fetchJob();
+    let isCancelled = false;
+    const currentRequestId = ++latestRequestIdRef.current;
+
+    // Immediately clear previous job details and error when navigating to a new/different job
+    setJob(null);
+    setErrorMessage(null);
+    setChangeHistory([]);
+    setShowHistory(false);
+
+    if (!jobId) {
+      setLoading(false);
+      setErrorMessage('No job identifier specified.');
+      return;
+    }
+
+    setLoading(true);
+
+    api.get(`/jobs/${jobId}`)
+      .then((res) => {
+        if (isCancelled || currentRequestId !== latestRequestIdRef.current) return;
+        if (res.data?.success && res.data.job) {
+          setJob(res.data.job);
+          setErrorMessage(null);
+        } else {
+          setJob(null);
+          setErrorMessage(res.data?.message || 'Job posting not found.');
+        }
+      })
+      .catch((err: any) => {
+        if (isCancelled || currentRequestId !== latestRequestIdRef.current) return;
+        setJob(null);
+        const msg = err.response?.data?.message || err.message || 'Job posting not found.';
+        setErrorMessage(msg);
+      })
+      .finally(() => {
+        if (isCancelled || currentRequestId !== latestRequestIdRef.current) return;
+        setLoading(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [jobId]);
 
   const handleApplySubmit = async (e: React.FormEvent) => {
@@ -231,16 +290,35 @@ export const JobDetailPage: React.FC = () => {
     );
   }
 
-  if (!job) {
+  if (errorMessage || !job) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-16 text-center space-y-4">
-        <h2 className="text-xl font-bold text-slate-800">Job Posting Not Found</h2>
-        <p className="text-sm text-slate-500">This temporary shift may have closed or expired.</p>
-        <Link to="/jobs">
-          <Button variant="outline" size="sm" leftIcon={<ChevronLeft className="w-4 h-4" />}>
-            Back to Job Discovery
-          </Button>
-        </Link>
+        <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto">
+          <AlertCircle className="w-6 h-6" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-800">
+          {errorMessage ? 'Unable to Load Job Posting' : 'Job Posting Not Found'}
+        </h2>
+        <p className="text-sm text-slate-500 max-w-md mx-auto">
+          {errorMessage || 'This temporary shift may have closed, expired, or been removed.'}
+        </p>
+        <div className="flex items-center justify-center gap-3 pt-2">
+          {jobId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fetchJob(true)}
+              leftIcon={<RefreshCw className="w-4 h-4" />}
+            >
+              Retry
+            </Button>
+          )}
+          <Link to="/jobs">
+            <Button variant="outline" size="sm" leftIcon={<ChevronLeft className="w-4 h-4" />}>
+              Back to Job Discovery
+            </Button>
+          </Link>
+        </div>
       </div>
     );
   }
