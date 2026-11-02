@@ -9,12 +9,17 @@ export const createReview = async (req, res, next) => {
     const { assignmentId, rating, reviewText } = req.body;
     const reviewerId = req.user._id;
 
-    if (!rating || rating < 1 || rating > 5) {
+    const numRating = Number(rating);
+    if (!Number.isInteger(numRating) || numRating < 1 || numRating > 5) {
       return res.status(400).json({ success: false, message: 'Rating must be an integer between 1 and 5.' });
     }
 
-    if (!reviewText || reviewText.trim().length < 5) {
-      return res.status(400).json({ success: false, message: 'Review text must be at least 5 characters long.' });
+    const trimmedText = String(reviewText || '').trim();
+    if (trimmedText.length < 5 || trimmedText.length > 1000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Review text must be between 5 and 1000 characters.'
+      });
     }
 
     const assignment = await Assignment.findById(assignmentId);
@@ -44,17 +49,28 @@ export const createReview = async (req, res, next) => {
       return res.status(409).json({ success: false, message: 'You have already submitted a review for this assignment.' });
     }
 
-    const review = await Review.create({
-      assignment: assignmentId,
-      reviewer: reviewerId,
-      reviewee: revieweeId,
-      rating: Number(rating),
-      reviewText: reviewText.trim()
-    });
+    let review;
+    try {
+      review = await Review.create({
+        assignment: assignmentId,
+        reviewer: reviewerId,
+        reviewee: revieweeId,
+        rating: numRating,
+        reviewText: trimmedText
+      });
+    } catch (createErr) {
+      if (createErr.code === 11000) {
+        return res.status(409).json({
+          success: false,
+          message: 'You have already submitted a review for this assignment.'
+        });
+      }
+      throw createErr;
+    }
 
     // Update aggregate rating on profile
     const allReviews = await Review.find({ reviewee: revieweeId, status: 'published' });
-    const avg = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length;
+    const avg = allReviews.reduce((sum, r) => sum + r.rating, 0) / (allReviews.length || 1);
     const roundedAvg = Math.round(avg * 10) / 10;
 
     if (isWorker) {
@@ -77,6 +93,12 @@ export const createReview = async (req, res, next) => {
       review
     });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: 'You have already submitted a review for this assignment.'
+      });
+    }
     next(error);
   }
 };

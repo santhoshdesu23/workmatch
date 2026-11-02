@@ -114,18 +114,29 @@ export const register = async (req, res, next) => {
     const isProduction = process.env.NODE_ENV === 'production';
     const isEnforced = isProduction || process.env.REQUIRE_REGISTRATION_VERIFICATION === 'true' || req.headers['x-require-otp-verification'] === 'true';
 
-    // Verify backend OTP state (do not trust frontend emailVerified flag)
-    const otpRecord = await EmailOtp.findOne({ email: normalizedEmail });
+    // Atomic OTP verification token validation & single-use consumption:
+    // A valid verification token matching the stored token hash for the exact normalized email is strictly required.
+    // Never treat verified: true alone as sufficient proof of ownership.
     let isEmailOtpVerified = false;
+    let consumedOtp = null;
 
-    if (otpRecord && otpRecord.verified && otpRecord.verifiedExpires && new Date(otpRecord.verifiedExpires).getTime() > Date.now()) {
-      if (req.body.verificationToken) {
-        const hashedProvided = crypto.createHash('sha256').update(String(req.body.verificationToken).trim()).digest('hex');
-        if (otpRecord.verificationToken && otpRecord.verificationToken === hashedProvided) {
-          isEmailOtpVerified = true;
-        }
-      } else {
+    if (req.body.verificationToken && typeof req.body.verificationToken === 'string' && req.body.verificationToken.trim()) {
+      const hashedProvided = crypto.createHash('sha256').update(req.body.verificationToken.trim()).digest('hex');
+      consumedOtp = await EmailOtp.findOneAndDelete({
+        email: normalizedEmail,
+        verified: true,
+        verificationToken: hashedProvided,
+        verifiedExpires: { $gt: new Date() }
+      });
+
+      if (consumedOtp) {
         isEmailOtpVerified = true;
+      } else {
+        return res.status(403).json({
+          success: false,
+          code: 'EMAIL_VERIFICATION_REQUIRED',
+          message: 'Email verification token is invalid, expired, or has already been consumed.'
+        });
       }
     }
 
@@ -133,7 +144,7 @@ export const register = async (req, res, next) => {
       return res.status(403).json({
         success: false,
         code: 'EMAIL_VERIFICATION_REQUIRED',
-        message: 'Email address has not been verified. Please complete email verification before registering.'
+        message: 'Email address has not been verified. A valid verification token is required.'
       });
     }
 
@@ -166,11 +177,6 @@ export const register = async (req, res, next) => {
       emailVerificationToken: hashedVerificationToken,
       emailVerificationExpires
     });
-
-    // If OTP record was consumed, clean it up so it cannot be reused
-    if (otpRecord && isEmailOtpVerified) {
-      await EmailOtp.deleteOne({ _id: otpRecord._id });
-    }
 
     // Create appropriate profile
     let profile = null;

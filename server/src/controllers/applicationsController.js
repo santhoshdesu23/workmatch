@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Application } from '../models/Application.js';
 import { Job } from '../models/Job.js';
 import { WorkerProfile } from '../models/WorkerProfile.js';
@@ -256,6 +257,189 @@ export const updateApplicationStatus = async (req, res, next) => {
         });
       }
 
+      // Safe rollback helper to avoid blind reopen to OPEN on cancelled, completed, or deadline-passed jobs
+      const safeCompensateHiring = async (jobId, targetAssignmentId, targetApplicationId, originalAppStatus) => {
+        if (targetAssignmentId) {
+          await Assignment.findByIdAndDelete(targetAssignmentId).catch(() => {});
+        }
+        if (jobId) {
+          const currentJob = await Job.findById(jobId);
+          const updates = { $inc: { filledCount: -1 } };
+          if (
+            currentJob &&
+            currentJob.status === JOB_STATUSES.FILLED &&
+            !isJobApplicationDeadlinePassed(currentJob) &&
+            !isJobWorkEnded(currentJob)
+          ) {
+            updates.$set = { status: JOB_STATUSES.OPEN };
+          }
+          await Job.findOneAndUpdate(
+            { _id: jobId, filledCount: { $gt: 0 } },
+            updates
+          ).catch(() => {});
+        }
+        if (targetApplicationId) {
+          await Application.findByIdAndUpdate(targetApplicationId, {
+            status: originalAppStatus,
+            $pop: { decisionHistory: 1 }
+          }).catch(() => {});
+        }
+      };
+
+      // Preferred path: MongoDB replica set transaction if supported by deployed database topology
+      const topoType = mongoose.connection?.client?.topology?.description?.type;
+      const supportsTransactions = topoType === 'ReplicaSetWithPrimary' || topoType === 'Sharded';
+
+      let session = null;
+      let transactionStarted = false;
+      if (supportsTransactions) {
+        try {
+          session = await mongoose.startSession();
+          session.startTransaction();
+          transactionStarted = true;
+        } catch {
+          if (session) {
+            await session.endSession().catch(() => {});
+            session = null;
+          }
+          transactionStarted = false;
+        }
+      }
+
+      if (transactionStarted && session) {
+        try {
+          const lockedApp = await Application.findOneAndUpdate(
+            {
+              _id: applicationId,
+              status: { $in: [APPLICATION_STATUSES.APPLIED, APPLICATION_STATUSES.SHORTLISTED, APPLICATION_STATUSES.OFFERED, APPLICATION_STATUSES.ACCEPTED] }
+            },
+            {
+              $set: { status: APPLICATION_STATUSES.HIRED },
+              $push: {
+                decisionHistory: {
+                  status: APPLICATION_STATUSES.HIRED,
+                  note: String(note || 'Applicant hired').slice(0, 500),
+                  changedBy: req.user._id,
+                  timestamp: new Date()
+                }
+              }
+            },
+            { new: true, session }
+          );
+
+          if (!lockedApp) {
+            await session.abortTransaction();
+            const currentApp = await Application.findById(applicationId);
+            if (currentApp && currentApp.status === APPLICATION_STATUSES.HIRED) {
+              return res.status(409).json({
+                success: false,
+                message: 'Candidate is already hired for this position.'
+              });
+            }
+            return res.status(409).json({
+              success: false,
+              message: `Cannot hire candidate in current status: ${currentApp?.status || 'unknown'}.`
+            });
+          }
+
+          const updatedJob = await Job.findOneAndUpdate(
+            { _id: job._id, filledCount: { $lt: job.openings } },
+            { $inc: { filledCount: 1 } },
+            { new: true, session }
+          );
+
+          if (!updatedJob) {
+            await session.abortTransaction();
+            return res.status(409).json({
+              success: false,
+              message: 'Hiring capacity reached: All openings for this job are already filled.'
+            });
+          }
+
+          if (updatedJob.filledCount >= updatedJob.openings) {
+            await Job.findByIdAndUpdate(job._id, { status: JOB_STATUSES.FILLED }, { session });
+          }
+
+          const assignment = await Assignment.create(
+            [
+              {
+                job: job._id,
+                worker: application.worker,
+                employer: job.employer,
+                application: application._id,
+                agreedSchedule: {
+                  workDate: job.workDate,
+                  workEndDate: job.workEndDate || job.workDate,
+                  startTime: job.startTime,
+                  endTime: job.endTime,
+                  totalHours: job.totalHours
+                },
+                agreedPayment: {
+                  grossAmount: job.grossPay,
+                  currency: job.currency,
+                  basis: job.payBasis
+                },
+                status: ASSIGNMENT_STATUSES.CONFIRMED
+              }
+            ],
+            { session }
+          );
+
+          await PaymentRecord.create(
+            [
+              {
+                assignment: assignment[0]._id,
+                job: job._id,
+                worker: application.worker,
+                employer: job.employer,
+                amount: job.grossPay,
+                currency: job.currency,
+                basis: job.payBasis,
+                status: PAYMENT_STATUSES.DUE,
+                expectedDate: job.workDate,
+                paymentMethod: job.paymentMethod,
+                verificationSource: 'employer_recorded'
+              }
+            ],
+            { session }
+          );
+
+          await EmployerProfile.findOneAndUpdate(
+            { user: job.employer },
+            { $inc: { totalHiredWorkers: 1 } },
+            { session }
+          );
+
+          await session.commitTransaction();
+
+          await createNotification({
+            recipient: application.worker,
+            type: 'SHIFT_UPCOMING',
+            title: `Application Accepted: ${job.title}`,
+            message: `Congratulations! You were hired for "${job.title}". Shift: ${job.startTime}–${job.endTime}.`,
+            link: `/worker/applications`
+          });
+
+          return res.status(200).json({
+            success: true,
+            message: 'Applicant successfully hired.',
+            application: lockedApp
+          });
+        } catch (txErr) {
+          await session.abortTransaction().catch(() => {});
+          if (txErr.code === 11000) {
+            return res.status(409).json({
+              success: false,
+              message: 'Worker already has an active assignment for this job.'
+            });
+          }
+          throw txErr;
+        } finally {
+          await session.endSession().catch(() => {});
+        }
+      }
+
+      // Fallback: Explicit idempotent state machine with conditional updates and safe recovery
       // 1. Atomically lock the application state so concurrent requests cannot double-hire
       const lockedApp = await Application.findOneAndUpdate(
         {
@@ -337,15 +521,8 @@ export const updateApplicationStatus = async (req, res, next) => {
           status: ASSIGNMENT_STATUSES.CONFIRMED
         });
       } catch (assignErr) {
-        // Compensate: decrement filledCount & reset application status
-        await Job.findByIdAndUpdate(job._id, {
-          $inc: { filledCount: -1 },
-          status: JOB_STATUSES.OPEN
-        });
-        await Application.findByIdAndUpdate(applicationId, {
-          status: application.status,
-          $pop: { decisionHistory: 1 }
-        });
+        // Compensate safely without blindly setting job to OPEN
+        await safeCompensateHiring(job._id, null, applicationId, application.status);
 
         if (assignErr.code === 11000) {
           return res.status(409).json({
@@ -372,16 +549,8 @@ export const updateApplicationStatus = async (req, res, next) => {
           verificationSource: 'employer_recorded'
         });
       } catch (payErr) {
-        // Compensate: delete assignment, decrement filledCount, reset application status
-        await Assignment.findByIdAndDelete(assignment._id);
-        await Job.findByIdAndUpdate(job._id, {
-          $inc: { filledCount: -1 },
-          status: JOB_STATUSES.OPEN
-        });
-        await Application.findByIdAndUpdate(applicationId, {
-          status: application.status,
-          $pop: { decisionHistory: 1 }
-        });
+        // Compensate safely without blindly setting job to OPEN
+        await safeCompensateHiring(job._id, assignment._id, applicationId, application.status);
         throw payErr;
       }
 

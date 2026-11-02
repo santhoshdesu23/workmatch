@@ -5,7 +5,7 @@ import { Application } from '../models/Application.js';
 import { Job } from '../models/Job.js';
 import { ASSIGNMENT_STATUSES, PAYMENT_STATUSES, APPLICATION_STATUSES, JOB_STATUSES, ROLES } from '../config/constants.js';
 import { createNotification } from '../services/notificationService.js';
-import { isJobWorkEnded, isJobWorkOngoing } from '../utils/scheduleUtils.js';
+import { isJobWorkEnded, isJobWorkOngoing, isJobApplicationDeadlinePassed } from '../utils/scheduleUtils.js';
 
 export const getMyAssignments = async (req, res, next) => {
   try {
@@ -101,23 +101,65 @@ export const updateAssignmentStatus = async (req, res, next) => {
       });
     }
 
-    // Handle transition to CANCELLED
+    // Handle transition to CANCELLED atomically
     if (status === ASSIGNMENT_STATUSES.CANCELLED) {
-      assignment.status = ASSIGNMENT_STATUSES.CANCELLED;
-      assignment.cancellationReason = notes || 'Cancelled by employer';
-      assignment.cancelledBy = req.user._id;
-      if (notes) assignment.attendance.notes = notes;
-      await assignment.save();
+      // Must be atomic to prevent race conditions on duplicate concurrent cancellations
+      const cancelledAssignment = await Assignment.findOneAndUpdate(
+        {
+          _id: assignmentId,
+          status: { $in: [ASSIGNMENT_STATUSES.CONFIRMED, ASSIGNMENT_STATUSES.IN_PROGRESS] }
+        },
+        {
+          $set: {
+            status: ASSIGNMENT_STATUSES.CANCELLED,
+            cancellationReason: notes || 'Cancelled by employer',
+            cancelledBy: req.user._id,
+            ...(notes ? { 'attendance.notes': notes } : {})
+          }
+        },
+        { new: true }
+      );
 
-      // Decrement job filledCount and reopen job if filled
-      await Job.findByIdAndUpdate(assignment.job, {
-        $inc: { filledCount: -1 },
-        $set: { status: JOB_STATUSES.OPEN }
-      });
+      if (!cancelledAssignment) {
+        const latest = await Assignment.findById(assignmentId);
+        if (latest?.status === ASSIGNMENT_STATUSES.COMPLETED) {
+          return res.status(400).json({
+            success: false,
+            message: 'Cannot modify the status of an already completed assignment.'
+          });
+        }
+        if (latest?.status === ASSIGNMENT_STATUSES.CANCELLED) {
+          return res.status(400).json({
+            success: false,
+            message: 'Cannot modify the status of a cancelled assignment.'
+          });
+        }
+        return res.status(400).json({
+          success: false,
+          message: `Cannot cancel assignment in current status: ${latest?.status || 'unknown'}.`
+        });
+      }
 
-      // Cancel associated payment record if DUE
+      // Conditional decrement: only decrement filledCount if filledCount > 0
+      const updatedJob = await Job.findOneAndUpdate(
+        { _id: cancelledAssignment.job, filledCount: { $gt: 0 } },
+        { $inc: { filledCount: -1 } },
+        { new: true }
+      );
+
+      // Only reopen if the job was FILLED and not CANCELLED/COMPLETED and work hasn't ended and deadline hasn't passed
+      if (updatedJob && updatedJob.status === JOB_STATUSES.FILLED && updatedJob.filledCount < updatedJob.openings) {
+        if (!isJobWorkEnded(updatedJob) && !isJobApplicationDeadlinePassed(updatedJob)) {
+          await Job.findOneAndUpdate(
+            { _id: updatedJob._id, status: JOB_STATUSES.FILLED },
+            { $set: { status: JOB_STATUSES.OPEN } }
+          );
+        }
+      }
+
+      // Cancel associated payment record if NOT already PAID
       await PaymentRecord.findOneAndUpdate(
-        { assignment: assignment._id, status: PAYMENT_STATUSES.DUE },
+        { assignment: cancelledAssignment._id, status: { $in: [PAYMENT_STATUSES.NOT_DUE, PAYMENT_STATUSES.DUE, PAYMENT_STATUSES.PROCESSING] } },
         {
           $set: { status: PAYMENT_STATUSES.CANCELLED },
           $push: {
@@ -132,14 +174,14 @@ export const updateAssignmentStatus = async (req, res, next) => {
       );
 
       // Cancel underlying application
-      if (assignment.application) {
-        await Application.findByIdAndUpdate(assignment.application, {
+      if (cancelledAssignment.application) {
+        await Application.findByIdAndUpdate(cancelledAssignment.application, {
           $set: { status: APPLICATION_STATUSES.CANCELLED }
         });
       }
 
       await createNotification({
-        recipient: assignment.worker,
+        recipient: cancelledAssignment.worker,
         type: 'APPLICATION_STATUS',
         title: 'Assignment Cancelled',
         message: `Your shift assignment has been cancelled by the employer. Reason: "${notes || 'None provided'}".`,
@@ -149,7 +191,7 @@ export const updateAssignmentStatus = async (req, res, next) => {
       return res.status(200).json({
         success: true,
         message: 'Assignment cancelled and job capacity restored.',
-        assignment
+        assignment: cancelledAssignment
       });
     }
 
@@ -231,6 +273,10 @@ export const confirmCompletion = async (req, res, next) => {
     }
 
     const now = new Date();
+    if (!assignment.completionConfirmations) {
+      assignment.completionConfirmations = {};
+    }
+
     if (isWorker) {
       assignment.completionConfirmations.workerConfirmed = true;
       assignment.completionConfirmations.workerConfirmedAt = now;
@@ -250,48 +296,92 @@ export const confirmCompletion = async (req, res, next) => {
         recipient: assignment.worker,
         type: 'COMPLETION_REQUEST',
         title: 'Employer confirmed shift completion',
-        message: `Employer confirmed your completion for "${assignment.job.title}". Payment status has been updated.`,
+        message: `Employer confirmed your completion for "${assignment.job.title}". Awaiting dual confirmation to finalize shift completion.`,
         link: '/worker/assignments'
       });
     }
 
-    // If both confirmed (or employer confirms completion), update assignment to COMPLETED
-    if (
-      (assignment.completionConfirmations.workerConfirmed &&
-        assignment.completionConfirmations.employerConfirmed) ||
-      isEmployer
-    ) {
-      assignment.status = ASSIGNMENT_STATUSES.COMPLETED;
-
-      // Update payment status to DUE or PROCESSING
-      await PaymentRecord.findOneAndUpdate(
-        { assignment: assignment._id },
-        {
-          $set: { status: PAYMENT_STATUSES.PROCESSING },
-          $push: {
-            history: {
-              status: PAYMENT_STATUSES.PROCESSING,
-              note: 'Shift confirmed completed. Payment processing triggered.',
-              updatedBy: req.user._id,
-              timestamp: now
-            }
-          }
-        }
-      );
-
-      // Increment worker's completed jobs count
-      await WorkerProfile.findOneAndUpdate(
-        { user: assignment.worker },
-        { $inc: { completedJobsCount: 1 } }
-      );
+    if (req.user.role === ROLES.ADMIN && !isWorker && !isEmployer) {
+      assignment.completionConfirmations.workerConfirmed = true;
+      assignment.completionConfirmations.workerConfirmedAt = now;
+      assignment.completionConfirmations.employerConfirmed = true;
+      assignment.completionConfirmations.employerConfirmedAt = now;
     }
 
-    await assignment.save();
+    // Dual-confirmation enforcement: both worker AND employer must confirm (or admin override)
+    const dualConfirmed = Boolean(
+      assignment.completionConfirmations.workerConfirmed &&
+      assignment.completionConfirmations.employerConfirmed
+    );
+    const shouldComplete = dualConfirmed || req.user.role === ROLES.ADMIN;
+
+    let updatedAssignment;
+    if (shouldComplete) {
+      // Atomic transition to COMPLETED guarded by status != COMPLETED to ensure exactly-once execution
+      updatedAssignment = await Assignment.findOneAndUpdate(
+        {
+          _id: assignmentId,
+          status: { $ne: ASSIGNMENT_STATUSES.COMPLETED }
+        },
+        {
+          $set: {
+            status: ASSIGNMENT_STATUSES.COMPLETED,
+            'completionConfirmations.workerConfirmed': assignment.completionConfirmations.workerConfirmed,
+            'completionConfirmations.workerConfirmedAt': assignment.completionConfirmations.workerConfirmedAt,
+            'completionConfirmations.employerConfirmed': assignment.completionConfirmations.employerConfirmed,
+            'completionConfirmations.employerConfirmedAt': assignment.completionConfirmations.employerConfirmedAt
+          }
+        },
+        { new: true }
+      ).populate('job');
+
+      if (updatedAssignment) {
+        // Shift successfully marked COMPLETED for the first time: trigger payment & metrics exactly once
+        await PaymentRecord.findOneAndUpdate(
+          { assignment: assignment._id },
+          {
+            $set: { status: PAYMENT_STATUSES.PROCESSING },
+            $push: {
+              history: {
+                status: PAYMENT_STATUSES.PROCESSING,
+                note: 'Shift dual-confirmed completed. Payment processing triggered.',
+                updatedBy: req.user._id,
+                timestamp: now
+              }
+            }
+          }
+        );
+
+        await WorkerProfile.findOneAndUpdate(
+          { user: assignment.worker },
+          { $inc: { completedJobsCount: 1 } }
+        );
+      } else {
+        // Already marked completed concurrently
+        updatedAssignment = await Assignment.findById(assignmentId).populate('job');
+      }
+    } else {
+      // Only one party has confirmed so far; save confirmation without marking shift completed
+      updatedAssignment = await Assignment.findByIdAndUpdate(
+        assignmentId,
+        {
+          $set: {
+            'completionConfirmations.workerConfirmed': assignment.completionConfirmations.workerConfirmed,
+            'completionConfirmations.workerConfirmedAt': assignment.completionConfirmations.workerConfirmedAt,
+            'completionConfirmations.employerConfirmed': assignment.completionConfirmations.employerConfirmed,
+            'completionConfirmations.employerConfirmedAt': assignment.completionConfirmations.employerConfirmedAt
+          }
+        },
+        { new: true }
+      ).populate('job');
+    }
 
     res.status(200).json({
       success: true,
-      message: 'Completion status recorded successfully.',
-      assignment
+      message: shouldComplete
+        ? 'Dual confirmation verified. Shift marked as completed.'
+        : 'Completion confirmation recorded. Awaiting confirmation from the other party.',
+      assignment: updatedAssignment || assignment
     });
   } catch (error) {
     next(error);

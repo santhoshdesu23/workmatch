@@ -193,6 +193,14 @@ export const resolveAdminReport = async (req, res, next) => {
     const { reportId } = req.params;
     const { status, resolutionNotes, substantiated } = req.body;
 
+    const allowedReportStatuses = ['pending', 'investigating', 'resolved', 'dismissed'];
+    if (status && !allowedReportStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid report status: "${status}". Allowed: ${allowedReportStatuses.join(', ')}`
+      });
+    }
+
     const report = await Report.findById(reportId);
     if (!report) {
       return res.status(404).json({ success: false, message: 'Report not found.' });
@@ -211,7 +219,7 @@ export const resolveAdminReport = async (req, res, next) => {
     }
 
     if (resolutionNotes !== undefined) {
-      report.resolutionNotes = String(resolutionNotes);
+      report.resolutionNotes = String(resolutionNotes).trim().slice(0, 2000);
     }
     report.resolvedBy = req.user._id;
     report.resolvedAt = new Date();
@@ -264,13 +272,21 @@ export const reviewAdminVerification = async (req, res, next) => {
     const { verificationId } = req.params;
     const { status, reviewNotes } = req.body; // status: 'approved' | 'rejected'
 
+    const allowedVerificationStatuses = ['approved', 'rejected'];
+    if (!status || !allowedVerificationStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid verification status: "${status}". Allowed: ${allowedVerificationStatuses.join(', ')}`
+      });
+    }
+
     const vReq = await VerificationRequest.findById(verificationId);
     if (!vReq) {
       return res.status(404).json({ success: false, message: 'Verification request not found.' });
     }
 
     vReq.status = status;
-    vReq.reviewNotes = reviewNotes || '';
+    vReq.reviewNotes = String(reviewNotes || '').trim().slice(0, 2000);
     vReq.reviewedBy = req.user._id;
     vReq.reviewedAt = new Date();
     await vReq.save();

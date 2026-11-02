@@ -2,33 +2,19 @@ import rateLimit from 'express-rate-limit';
 
 const isTest = process.env.NODE_ENV === 'test';
 const isProduction = process.env.NODE_ENV === 'production';
-const rateLimitStoreType = (process.env.RATE_LIMIT_STORE || 'memory').toLowerCase();
-
-// Fail-fast validation: If distributed Redis rate limiting is declared in production, require REDIS_URL
-if (isProduction && rateLimitStoreType === 'redis') {
-  if (!process.env.REDIS_URL || process.env.REDIS_URL.trim() === '') {
-    throw new Error(
-      'FATAL CONFIGURATION ERROR: RATE_LIMIT_STORE is set to "redis" in production, but REDIS_URL environment variable is missing.'
-    );
-  }
-}
+const declaredStoreType = (process.env.RATE_LIMIT_STORE || 'memory').toLowerCase();
 
 /**
- * Determine store configuration.
- * In a single-instance deployment, local development, or testing, MemoryStore is used.
- * When REDIS_URL is configured, a distributed store adapter is attached.
+ * In-memory rate limiting store:
+ * Built-in Express MemoryStore is active across all single-instance deployment topologies.
+ * Distributed Redis store requires 'rate-limit-redis' and 'ioredis' packages, which are
+ * not bundled in current server dependencies. Thus, rate limiting is strictly memory-backed.
  */
-let sharedStore = undefined;
-if (rateLimitStoreType === 'redis' && process.env.REDIS_URL) {
-  try {
-    // Dynamic import to prevent hard dependency crashes if optional redis packages are not installed
-    console.log('[RateLimiter] Initializing distributed Redis rate-limiting store...');
-  } catch (err) {
-    if (isProduction) {
-      throw new Error(`[RateLimiter] Failed to initialize Redis store: ${err.message}`);
-    } else {
-      console.warn('[RateLimiter] Redis store unavailable, falling back to in-memory store for development:', err.message);
-    }
+const sharedStore = undefined;
+
+if (declaredStoreType === 'redis') {
+  if (isProduction) {
+    console.warn('[RateLimiter] Notice: RATE_LIMIT_STORE=redis requested, but no Redis store adapter is installed. Operating in in-memory mode.');
   }
 }
 
@@ -43,11 +29,12 @@ function resolveClientIp(req) {
 
 /**
  * Topology probe for health checks, diagnostics, and testing.
+ * Accurately reports whether a functioning distributed store adapter is configured.
  */
 export function getRateLimiterTopology() {
   return {
-    storeType: sharedStore ? 'redis' : 'memory',
-    isDistributed: Boolean(sharedStore),
+    storeType: 'memory',
+    isDistributed: false,
     proxyTrust: 'single-hop'
   };
 }
