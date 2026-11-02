@@ -136,6 +136,11 @@ export interface Job {
   viewsCount?: number;
   applicationsCount?: number;
   distanceKm?: number | null;
+  distanceReliability?: 'exact' | 'approximate' | 'unknown';
+  matchType?: 'exact' | 'strong' | 'partial';
+  matchedRequirements?: string[];
+  missingOptionalSkills?: string[];
+  preferenceDifferences?: string[];
   matchData?: MatchData | null;
   userApplication?: Application | null;
   isSaved?: boolean;
@@ -370,4 +375,24 @@ export interface VerificationItem {
   };
   reviewNotes?: string;
   createdAt: string;
+}
+
+export interface MixedMatchResults {
+  exact: Job[];
+  strong: Job[];
+  partial: Job[];
+}
+
+export interface MixedMatchCounts {
+  exact: number;
+  strong: number;
+  partial: number;
+  total: number;
+}
+
+export interface AppliedRequirement {
+  field: string;
+  value: any;
+  type: 'HARD' | 'SOFT';
+  source: 'UI_FILTER' | 'NLP_QUERY' | 'WORKER_PROFILE' | 'SEARCH_KEYWORD' | 'SAFETY_CONDITION' | 'EMPLOYER_MANDATORY';
 }

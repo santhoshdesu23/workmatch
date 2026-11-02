@@ -2,7 +2,12 @@ import { Job } from '../models/Job.js';
 import { WorkerProfile } from '../models/WorkerProfile.js';
 import { EmployerProfile } from '../models/EmployerProfile.js';
 import { JOB_STATUSES, ROLES } from '../config/constants.js';
-import { computeJobMatch, sanitizeSkills } from '../services/matchingService.js';
+import {
+  computeJobMatch,
+  sanitizeSkills,
+  partitionMixedJobMatches,
+  PROVENANCE_SOURCES
+} from '../services/matchingService.js';
 import { aiExplanationService } from '../services/aiExplanationService.js';
 import {
   isJobOpenForApplications,
@@ -21,6 +26,8 @@ export const getJobRecommendations = async (req, res, next) => {
     if (!workerProfile) {
       return res.status(200).json({
         success: true,
+        results: { exact: [], strong: [], partial: [] },
+        counts: { exact: 0, strong: 0, partial: 0, total: 0 },
         recommendations: [],
         totalMatched: 0,
         requiresProfileCompletion: true,
@@ -35,6 +42,8 @@ export const getJobRecommendations = async (req, res, next) => {
     if (sanitizedWorkerSkills.length === 0) {
       return res.status(200).json({
         success: true,
+        results: { exact: [], strong: [], partial: [] },
+        counts: { exact: 0, strong: 0, partial: 0, total: 0 },
         recommendations: [],
         totalMatched: 0,
         requiresProfileCompletion: true,
@@ -45,14 +54,15 @@ export const getJobRecommendations = async (req, res, next) => {
     }
 
     // Case B: Worker has skills
-    const { limit = 20, minScore = 40, maxDistanceKm } = req.query;
+    const { limit = 20, minScore = 40, maxDistanceKm, showCloseMatches } = req.query;
 
+    // Bounded candidate scoring: retrieve at most 200 open jobs
     const openJobs = await Job.find({ status: JOB_STATUSES.OPEN })
+      .limit(200)
       .populate('employer', 'name email verificationStatus')
       .lean();
 
     const now = new Date();
-    // Exclude jobs whose application deadline has passed or whose scheduled work has ended
     const availableJobs = openJobs.filter((job) => isJobOpenForApplications(job, now));
 
     const employerIds = availableJobs.map((j) => j.employer?._id).filter(Boolean);
@@ -60,10 +70,8 @@ export const getJobRecommendations = async (req, res, next) => {
     const empProfileMap = new Map();
     employerProfiles.forEach((p) => empProfileMap.set(p.user.toString(), p));
 
-    const scoredJobs = availableJobs.map((job) => {
-      const matchResult = computeJobMatch(workerProfile, job);
+    const enrichedJobs = availableJobs.map((job) => {
       const empProf = empProfileMap.get(job.employer?._id?.toString());
-
       return {
         ...job,
         isDeadlinePassed: isJobApplicationDeadlinePassed(job, now),
@@ -76,52 +84,54 @@ export const getJobRecommendations = async (req, res, next) => {
               verificationStatus: empProf.verificationStatus,
               rating: empProf.rating
             }
-          : null,
-        matchData: matchResult
+          : null
       };
     });
 
-    // Distance boundary check:
-    // If worker has coordinates, exclude shifts that are excessively distant from their travel radius
-    const workerHasCoords =
-      workerProfile.location?.coordinates &&
-      Array.isArray(workerProfile.location.coordinates) &&
-      workerProfile.location.coordinates.length >= 2 &&
-      !(workerProfile.location.coordinates[0] === 0 && workerProfile.location.coordinates[1] === 0);
+    const filters = {};
+    if (maxDistanceKm) filters.maxDistanceKm = Number(maxDistanceKm);
 
-    const maxAllowedDist = maxDistanceKm
-      ? Number(maxDistanceKm)
-      : (workerProfile.travelRadiusKm ? Math.max(50, Number(workerProfile.travelRadiusKm) * 2) : 50);
+    const partitionResult = partitionMixedJobMatches(enrichedJobs, {
+      workerProfile,
+      filters,
+      provenanceMap: {
+        maxDistanceKm: PROVENANCE_SOURCES.UI_FILTER
+      },
+      showCloseMatches: showCloseMatches !== 'false' && showCloseMatches !== false,
+      now
+    });
 
-    // Case B & Case C: Exclude jobs with unrelated skills, excessive distance, and jobs below threshold
-    // If a job specifies required skills, worker MUST match at least one required skill
-    const filteredJobs = scoredJobs
-      .filter((j) => {
-        const jobReqSkills = sanitizeSkills(j.requiredSkills);
-        if (jobReqSkills.length > 0 && (!j.matchData.matchedSkills || j.matchData.matchedSkills.length === 0)) {
-          return false;
-        }
+    // Also attach matchData for backward compatibility with existing tests
+    const attachMatchData = (j) => ({
+      ...j,
+      matchData: computeJobMatch(workerProfile, j)
+    });
 
-        // Location distance boundary: exclude jobs exceeding travel radius / boundary
-        if (workerHasCoords && j.matchData.distanceKm !== null && j.matchData.distanceKm > maxAllowedDist) {
-          return false;
-        }
+    const finalExact = partitionResult.results.exact.map(attachMatchData);
+    const finalStrong = partitionResult.results.strong.map(attachMatchData);
+    const finalPartial = partitionResult.results.partial.map(attachMatchData);
 
-        return j.matchData.matchScore >= Number(minScore);
-      })
-      .sort((a, b) => b.matchData.matchScore - a.matchData.matchScore)
+    const flatRecommendations = [...finalExact, ...finalStrong, ...finalPartial]
+      .filter((j) => (j.matchScore || j.matchData?.matchScore || 0) >= Number(minScore))
       .slice(0, Number(limit));
 
     res.status(200).json({
       success: true,
-      recommendations: filteredJobs,
-      totalMatched: filteredJobs.length,
+      results: {
+        exact: finalExact,
+        strong: finalStrong,
+        partial: finalPartial
+      },
+      counts: partitionResult.counts,
+      appliedRequirements: partitionResult.appliedRequirements,
+      recommendations: flatRecommendations,
+      totalMatched: flatRecommendations.length,
       requiresProfileCompletion: false,
       hasSkills: true,
-      message: filteredJobs.length > 0
+      message: flatRecommendations.length > 0
         ? 'Recommendations generated successfully.'
         : 'No matching jobs found yet. Try updating your skills or preferences, or check again later.',
-      evaluatedAt: new Date().toISOString()
+      evaluatedAt: partitionResult.evaluatedAt
     });
   } catch (error) {
     next(error);

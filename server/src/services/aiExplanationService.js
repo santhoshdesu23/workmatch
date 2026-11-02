@@ -80,7 +80,15 @@ Tone: Professional, supportive, objective. Do not make false guarantees.
       keyword: query,
       category: null,
       maxDistanceKm: null,
-      minPay: null
+      minPay: null,
+      maxPay: null,
+      payBasis: null,
+      shiftTiming: null,
+      workDate: null,
+      dateFilter: null,
+      requiredSkills: [],
+      confidence: 0.5,
+      ambiguities: []
     };
 
     if (!this.apiKey || !query || process.env.NODE_ENV === 'test') {
@@ -97,7 +105,13 @@ Return ONLY a valid JSON object with keys:
 "keyword": string or null,
 "category": string or null (from: "Event assistance", "Wedding and catering support", "Restaurant and hospitality", "Retail and store assistance", "Warehouse and packing", "Delivery and logistics", "Data entry and office assistance", "Cleaning and maintenance", "Tutoring and event staffing"),
 "maxDistanceKm": number or null,
-"minPay": number or null.
+"minPay": number or null,
+"maxPay": number or null,
+"payBasis": string or null ("hourly", "daily", "shift", "task"),
+"shiftTiming": string or null ("morning", "afternoon", "evening", "night"),
+"locality": string or null,
+"city": string or null,
+"requiredSkills": array of strings.
 `;
 
       const response = await fetch(url, {
@@ -150,42 +164,172 @@ Return ONLY a valid JSON object with keys:
   }
 
   /**
-   * Deterministic local fallback query parser
+   * Deterministic local fallback query parser with comprehensive intent recognition
    */
   getLocalDeterministicQueryParser(query) {
-    const lower = (query || '').toLowerCase();
+    const raw = String(query || '').trim();
+    const lower = raw.toLowerCase();
+    const ambiguities = [];
+
+    // 1. Shift Timing ("morning", "afternoon", "evening", "night")
+    let shiftTiming = null;
+    if (/\bevening\b/i.test(lower)) shiftTiming = 'evening';
+    else if (/\bmorning\b/i.test(lower)) shiftTiming = 'morning';
+    else if (/\bafternoon\b/i.test(lower)) shiftTiming = 'afternoon';
+    else if (/\bnight\b/i.test(lower)) shiftTiming = 'night';
+
+    // 2. Category & Skills recognition
     let category = null;
+    const requiredSkills = [];
 
-    if (lower.includes('event') || lower.includes('usher')) category = 'Event assistance';
-    else if (lower.includes('catering') || lower.includes('wedding')) category = 'Wedding and catering support';
-    else if (lower.includes('restaurant') || lower.includes('server') || lower.includes('waiter') || lower.includes('barista')) category = 'Restaurant and hospitality';
-    else if (lower.includes('retail') || lower.includes('store') || lower.includes('cashier')) category = 'Retail and store assistance';
-    else if (lower.includes('warehouse') || lower.includes('packing') || lower.includes('forklift')) category = 'Warehouse and packing';
-    else if (lower.includes('delivery') || lower.includes('driver')) category = 'Delivery and logistics';
-    else if (lower.includes('clean') || lower.includes('janitor')) category = 'Cleaning and maintenance';
-    else if (lower.includes('data entry') || lower.includes('office')) category = 'Data entry and office assistance';
-
-    let minPay = null;
-    const payMatch = lower.match(/(?:\$|₹|rs\.?|inr)?\s*(\d+)\s*(?:\/hr|per hour|hourly|\/shift|per shift|shift|\$|₹)?/);
-    if (payMatch && payMatch[1]) {
-      const val = parseInt(payMatch[1], 10);
-      if (val > 0) minPay = val;
+    if (lower.includes('data entry') || lower.includes('office assistance')) {
+      category = 'Data entry and office assistance';
+      requiredSkills.push('data entry');
+    } else if (lower.includes('event') || lower.includes('usher')) {
+      category = 'Event assistance';
+    } else if (lower.includes('catering') || lower.includes('wedding')) {
+      category = 'Wedding and catering support';
+    } else if (lower.includes('restaurant') || lower.includes('server') || lower.includes('waiter') || lower.includes('barista')) {
+      category = 'Restaurant and hospitality';
+      if (lower.includes('server') || lower.includes('waiter')) requiredSkills.push('server');
+    } else if (lower.includes('retail') || lower.includes('store') || lower.includes('cashier')) {
+      category = 'Retail and store assistance';
+      if (lower.includes('cashier')) requiredSkills.push('cashier');
+    } else if (lower.includes('warehouse') || lower.includes('packing') || lower.includes('packaging') || lower.includes('forklift')) {
+      category = 'Warehouse and packing';
+      if (lower.includes('packing') || lower.includes('packaging')) requiredSkills.push('packing');
+    } else if (lower.includes('delivery') || lower.includes('driver')) {
+      category = 'Delivery and logistics';
+      if (lower.includes('driver')) requiredSkills.push('driver');
+    } else if (lower.includes('clean') || lower.includes('janitor') || lower.includes('housekeeping')) {
+      category = 'Cleaning and maintenance';
+      if (lower.includes('cleaning') || lower.includes('housekeeping')) requiredSkills.push('cleaning');
+    } else if (lower.includes('tutoring') || lower.includes('tutor')) {
+      category = 'Tutoring and event staffing';
     }
 
+    // 3. Payment parsing (range, min, max, payBasis)
+    let minPay = null;
+    let maxPay = null;
+    let payBasis = null;
+
+    if (/\b(?:per\s*day|\/day|daily)\b/i.test(lower)) {
+      payBasis = 'daily';
+    } else if (/\b(?:per\s*hour|\/hr|hourly)\b/i.test(lower)) {
+      payBasis = 'hourly';
+    } else if (/\b(?:per\s*shift|\/shift|shift)\b/i.test(lower)) {
+      payBasis = 'shift';
+    }
+
+    // Pay range match: e.g. "paying ₹500 to ₹800 per day", "500 to 800", "500-800"
+    const rangeMatch = lower.match(/(?:paying|pay|rate|for)?\s*(?:₹|rs\.?|inr|\$)?\s*(\d+)\s*(?:to|-)\s*(?:₹|rs\.?|inr|\$)?\s*(\d+)/i);
+    if (rangeMatch && rangeMatch[1] && rangeMatch[2]) {
+      minPay = parseInt(rangeMatch[1], 10);
+      maxPay = parseInt(rangeMatch[2], 10);
+    } else {
+      const singlePayMatch =
+        lower.match(/(?:paying|pay|min|over|at least)?\s*(?:₹|rs\.?|inr|\$)\s*(\d+)/i) ||
+        lower.match(/(\d+)\s*(?:\/day|per day|daily|\/hr|per hour|hourly|\/shift|per shift)/i);
+      if (singlePayMatch && singlePayMatch[1]) {
+        minPay = parseInt(singlePayMatch[1], 10);
+      }
+    }
+
+    // 4. Distance radius
+    let maxDistanceKm = null;
+    const distMatch =
+      lower.match(/(?:within|in|under|radius of)\s*(\d+)\s*(?:km|kilometers)/i) ||
+      lower.match(/(\d+)\s*(?:km|kilometers)\s*(?:radius|distance|within)/i);
+    if (distMatch && distMatch[1]) {
+      maxDistanceKm = parseInt(distMatch[1], 10);
+    } else if (lower.includes('near') || lower.includes('nearby')) {
+      maxDistanceKm = 15;
+    }
+
+    // 5. Locality and City
     let locality = null;
-    if (lower.includes('atigre')) locality = 'Atigre';
-    else if (lower.includes('shiroli')) locality = 'Shiroli MIDC';
-    else if (lower.includes('ichalkaranji')) locality = 'Ichalkaranji';
-    else if (lower.includes('hatkanangale')) locality = 'Hatkanangale';
-    else if (lower.includes('jaysingpur') || lower.includes('jaisingpur')) locality = 'Jaysingpur';
-    else if (lower.includes('kolhapur')) locality = 'Kolhapur';
+    let city = null;
+    if (lower.includes('vijayawada')) {
+      city = 'Vijayawada';
+      locality = 'Vijayawada';
+    } else if (lower.includes('atigre')) {
+      locality = 'Atigre';
+      city = 'Kolhapur';
+    } else if (lower.includes('shiroli')) {
+      locality = 'Shiroli MIDC';
+      city = 'Kolhapur';
+    } else if (lower.includes('ichalkaranji')) {
+      locality = 'Ichalkaranji';
+      city = 'Kolhapur';
+    } else if (lower.includes('hatkanangale')) {
+      locality = 'Hatkanangale';
+      city = 'Kolhapur';
+    } else if (lower.includes('jaysingpur') || lower.includes('jaisingpur')) {
+      locality = 'Jaysingpur';
+      city = 'Kolhapur';
+    } else if (lower.includes('kolhapur')) {
+      locality = 'Kolhapur';
+      city = 'Kolhapur';
+    } else {
+      const cityMatch = raw.match(/\bin\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/);
+      if (cityMatch && cityMatch[1]) {
+        locality = cityMatch[1].trim();
+        city = cityMatch[1].trim();
+      }
+    }
+
+    // 6. Date / Weekend parsing
+    let workDate = null;
+    let dateFilter = null;
+    const now = new Date();
+
+    if (lower.includes('this weekend') || lower.includes('weekend')) {
+      dateFilter = 'weekend';
+      const dayOfWeek = now.getDay();
+      const daysUntilSaturday = (6 - dayOfWeek + 7) % 7 || 7;
+      const saturday = new Date(now);
+      saturday.setDate(now.getDate() + daysUntilSaturday);
+      workDate = saturday.toISOString().split('T')[0];
+    } else if (lower.includes('tomorrow')) {
+      dateFilter = 'tomorrow';
+      const tmrw = new Date(now);
+      tmrw.setDate(now.getDate() + 1);
+      workDate = tmrw.toISOString().split('T')[0];
+    } else if (lower.includes('today')) {
+      dateFilter = 'today';
+      workDate = now.toISOString().split('T')[0];
+    }
+
+    // Keyword formulation: default to raw or skill
+    let keyword = raw;
+    if (requiredSkills.length > 0) {
+      keyword = requiredSkills[0];
+    } else if (category) {
+      keyword = category;
+    }
+
+    // Confidence scoring
+    let confidence = 0.6;
+    if (category) confidence += 0.15;
+    if (locality || city) confidence += 0.1;
+    if (minPay || maxDistanceKm) confidence += 0.1;
+    confidence = Math.min(0.98, Math.round(confidence * 100) / 100);
 
     return {
-      keyword: query,
+      keyword,
       category,
       locality,
-      maxDistanceKm: lower.includes('near') ? 15 : null,
+      city,
+      maxDistanceKm,
       minPay,
+      maxPay,
+      payBasis,
+      shiftTiming,
+      workDate,
+      dateFilter,
+      requiredSkills,
+      confidence,
+      ambiguities,
       source: 'local-rule-parser'
     };
   }

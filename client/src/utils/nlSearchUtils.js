@@ -34,12 +34,32 @@ export function resolveNlFilters(currentFilters = {}, parsed = null, presets = [
     nextFilters.minPay = String(parsed.minPay).trim();
   }
 
-  // 4. Maximum distance: update only if valid non-empty number or string
+  // 4. Maximum pay
+  if (parsed.maxPay !== undefined && parsed.maxPay !== null && String(parsed.maxPay).trim() !== '') {
+    nextFilters.maxPay = String(parsed.maxPay).trim();
+  }
+
+  // 5. Payment basis
+  if (parsed.payBasis !== undefined && parsed.payBasis !== null && String(parsed.payBasis).trim() !== '') {
+    nextFilters.payBasis = String(parsed.payBasis).trim();
+  }
+
+  // 6. Work date
+  if (parsed.workDate !== undefined && parsed.workDate !== null && String(parsed.workDate).trim() !== '') {
+    nextFilters.workDate = String(parsed.workDate).trim();
+  }
+
+  // 7. Shift timing
+  if (parsed.shiftTiming !== undefined && parsed.shiftTiming !== null && String(parsed.shiftTiming).trim() !== '') {
+    nextFilters.shiftTiming = String(parsed.shiftTiming).trim();
+  }
+
+  // 8. Maximum distance: update only if valid non-empty number or string
   if (parsed.maxDistanceKm !== undefined && parsed.maxDistanceKm !== null && String(parsed.maxDistanceKm).trim() !== '') {
     nextFilters.maxDistanceKm = String(parsed.maxDistanceKm).trim();
   }
 
-  // 5. Locality and coordinates: update consistently if provided
+  // 9. Locality and coordinates: update consistently if provided
   if (parsed.locality !== undefined && parsed.locality !== null && String(parsed.locality).trim() !== '') {
     const trimmedLocality = String(parsed.locality).trim();
     nextFilters.locality = trimmedLocality;

@@ -4,9 +4,15 @@ export function buildJobSearchParams(filters) {
   if (filters.search) params.set('search', filters.search);
   if (filters.category) params.set('category', filters.category);
   if (filters.minPay) params.set('minPay', filters.minPay);
+  if (filters.maxPay) params.set('maxPay', filters.maxPay);
+  if (filters.payBasis) params.set('payBasis', filters.payBasis);
   if (filters.workDate) params.set('workDate', filters.workDate);
+  if (filters.shiftTiming) params.set('shiftTiming', filters.shiftTiming);
   if (filters.maxDistanceKm) params.set('maxDistanceKm', filters.maxDistanceKm);
   if (filters.sort) params.set('sort', filters.sort);
+  if (filters.showCloseMatches !== undefined && filters.showCloseMatches !== null) {
+    params.set('showCloseMatches', String(filters.showCloseMatches));
+  }
 
   const hasCoordinates = Boolean(
     filters.coordinates &&

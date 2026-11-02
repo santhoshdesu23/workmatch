@@ -7,7 +7,13 @@ import { PaymentRecord } from '../models/PaymentRecord.js';
 import { User } from '../models/User.js';
 import { JobChangeHistory } from '../models/JobChangeHistory.js';
 import { JOB_STATUSES, ROLES, ASSIGNMENT_STATUSES, PAYMENT_STATUSES } from '../config/constants.js';
-import { computeJobMatch, calculateDistanceKm, calculateDistanceKmPrecise } from '../services/matchingService.js';
+import {
+  computeJobMatch,
+  calculateDistanceKm,
+  calculateDistanceKmPrecise,
+  partitionMixedJobMatches,
+  PROVENANCE_SOURCES
+} from '../services/matchingService.js';
 import { createNotification } from '../services/notificationService.js';
 import { computeEmployerReliability } from '../services/reliabilityService.js';
 import {
@@ -156,6 +162,7 @@ export const getJobs = async (req, res, next) => {
     }
 
     let jobs = await Job.find(query)
+      .limit(300)
       .populate('employer', 'name email verificationStatus')
       .lean();
 
@@ -201,8 +208,8 @@ export const getJobs = async (req, res, next) => {
       return res.status(400).json({ success: false, code: 'LOCATION_REQUIRED', message: 'Choose a valid location or enable device location before applying a search radius.' });
     }
 
-    // Compute distance and match scores
-    jobs = jobs.map((job) => {
+    // Prepare candidate jobs enriched with metadata
+    let enrichedJobs = jobs.map((job) => {
       const empProf = empProfileMap.get(job.employer?._id?.toString());
       let distanceKm = null;
 
@@ -255,9 +262,7 @@ export const getJobs = async (req, res, next) => {
 
     // Distance radius filter: Only retain jobs with reliable distance within maxDistanceKm
     if (hasRadius) {
-      // Use unrounded Haversine distance so the boundary is accurate; jobs with
-      // missing or uncalibrated coordinates cannot be represented as nearby.
-      jobs = jobs.filter((job) => {
+      enrichedJobs = enrichedJobs.filter((job) => {
         const coordinates = job.location?.coordinates;
         if (!Array.isArray(coordinates) || coordinates.length < 2) return false;
         const preciseDistance = calculateDistanceKmPrecise(originLat, originLng, coordinates[1], coordinates[0]);
@@ -265,32 +270,108 @@ export const getJobs = async (req, res, next) => {
       });
     }
 
+    // Partition into exact, strong, and partial matches
+    const showCloseMatchesParam = req.query.showCloseMatches;
+    const showCloseMatches = showCloseMatchesParam !== undefined
+      ? (showCloseMatchesParam !== 'false' && showCloseMatchesParam !== false)
+      : true;
+
+    const partitionFilters = {
+      category,
+      minPay,
+      maxPay,
+      payBasis,
+      workDate,
+      workDateTo: req.query.workDateTo,
+      shiftTiming: req.query.shiftTiming,
+      maxDistanceKm: hasRadius ? parsedRadius : undefined,
+      originLat,
+      originLng
+    };
+
+    const partitionResult = partitionMixedJobMatches(enrichedJobs, {
+      workerProfile,
+      filters: partitionFilters,
+      provenanceMap: {
+        category: PROVENANCE_SOURCES.UI_FILTER,
+        minPay: PROVENANCE_SOURCES.UI_FILTER,
+        maxPay: PROVENANCE_SOURCES.UI_FILTER,
+        payBasis: PROVENANCE_SOURCES.UI_FILTER,
+        workDate: PROVENANCE_SOURCES.UI_FILTER,
+        shiftTiming: PROVENANCE_SOURCES.UI_FILTER,
+        maxDistanceKm: PROVENANCE_SOURCES.UI_FILTER
+      },
+      showCloseMatches,
+      now
+    });
+
+    // Determine list of jobs to paginate:
+    // If worker requested best_match or matchedOnly, return matched partitions.
+    // For standard catalog browsing, preserve all open jobs matching search filters.
+    let candidateJobs;
+    const isMatchedOnlyRequested = req.query.matchedOnly === 'true' || sort === 'best_match';
+
+    if (isMatchedOnlyRequested && workerProfile) {
+      candidateJobs = [
+        ...partitionResult.results.exact,
+        ...partitionResult.results.strong,
+        ...partitionResult.results.partial
+      ];
+    } else {
+      // Map matchType and matchScore onto enrichedJobs for browsing
+      const matchMap = new Map();
+      [...partitionResult.results.exact, ...partitionResult.results.strong, ...partitionResult.results.partial].forEach((m) => {
+        matchMap.set(m._id.toString(), m);
+      });
+
+      candidateJobs = enrichedJobs.map((job) => {
+        const matched = matchMap.get(job._id.toString());
+        if (matched) {
+          return {
+            ...job,
+            matchType: matched.matchType,
+            matchScore: matched.matchScore,
+            matchedRequirements: matched.matchedRequirements,
+            matchedSkills: matched.matchedSkills,
+            missingOptionalSkills: matched.missingOptionalSkills,
+            preferenceDifferences: matched.preferenceDifferences,
+            explanations: matched.explanations
+          };
+        }
+        return job;
+      });
+    }
+
     // Sorting
     if (sort === 'highest_pay') {
-      jobs.sort((a, b) => b.grossPay - a.grossPay);
+      candidateJobs.sort((a, b) => b.grossPay - a.grossPay);
     } else if (sort === 'nearest') {
-      jobs.sort((a, b) => {
+      candidateJobs.sort((a, b) => {
         if (a.distanceKm === null && b.distanceKm === null) return 0;
         if (a.distanceKm === null) return 1;
         if (b.distanceKm === null) return -1;
         return a.distanceKm - b.distanceKm;
       });
     } else if (sort === 'soonest') {
-      jobs.sort((a, b) => new Date(a.workDate) - new Date(b.workDate));
+      candidateJobs.sort((a, b) => new Date(a.workDate) - new Date(b.workDate));
     } else if (sort === 'best_match' && workerProfile) {
-      jobs.sort((a, b) => (b.matchData?.matchScore || 0) - (a.matchData?.matchScore || 0));
+      candidateJobs.sort((a, b) => (b.matchScore || b.matchData?.matchScore || 0) - (a.matchScore || a.matchData?.matchScore || 0));
     } else {
       // Default: recent
-      jobs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      candidateJobs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     }
 
-    const total = jobs.length;
+    const total = candidateJobs.length;
     const pageNum = Number(page);
     const limitNum = Number(limit);
-    const paginated = jobs.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+    const paginated = candidateJobs.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
     res.status(200).json({
       success: true,
+      results: partitionResult.results,
+      counts: partitionResult.counts,
+      appliedRequirements: partitionResult.appliedRequirements,
+      evaluatedAt: partitionResult.evaluatedAt,
       jobs: paginated,
       total,
       pagination: {
