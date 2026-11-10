@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BadgeCheck, ShieldCheck, CheckCircle2, XCircle, Clock, Building2 } from 'lucide-react';
+import { BadgeCheck } from 'lucide-react';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { VerificationItem } from '../../types';

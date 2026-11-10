@@ -1,10 +1,7 @@
 import { MATCH_WEIGHTS } from '../config/constants.js';
 import {
-  isJobOpenForApplications,
   isJobApplicationDeadlinePassed,
   isJobWorkEnded,
-  isJobWorkOngoing,
-  getEffectiveJobStatus,
   extractCalendarDateParts
 } from '../utils/scheduleUtils.js';
 

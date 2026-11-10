@@ -2,7 +2,7 @@ import { Review } from '../models/Review.js';
 import { Assignment } from '../models/Assignment.js';
 import { WorkerProfile } from '../models/WorkerProfile.js';
 import { EmployerProfile } from '../models/EmployerProfile.js';
-import { ASSIGNMENT_STATUSES, ROLES } from '../config/constants.js';
+import { ASSIGNMENT_STATUSES } from '../config/constants.js';
 
 export const createReview = async (req, res, next) => {
   try {

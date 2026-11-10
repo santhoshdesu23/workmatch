@@ -5,11 +5,8 @@ import {
   MapPin,
   Calendar,
   Clock,
-  DollarSign,
   Building2,
-  ArrowRight,
   Send,
-  Info,
   CheckCircle2,
   AlertCircle,
   ChevronDown,
@@ -29,7 +26,7 @@ import { formatPayWithBasis } from '../../utils/currency';
 
 export const WorkerRecommendationsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { success, error: toastError, info } = useToast();
+  const { success, error: toastError } = useToast();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [mixedResults, setMixedResults] = useState<MixedMatchResults | null>(null);
   const [matchCounts, setMatchCounts] = useState<MixedMatchCounts>({
@@ -51,7 +48,6 @@ export const WorkerRecommendationsPage: React.FC = () => {
   // AI Explanation Modal
   const [explainingJob, setExplainingJob] = useState<Job | null>(null);
   const [aiText, setAiText] = useState<string>('');
-  const [aiSource, setAiSource] = useState<string>('');
   const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
 
   // Application Modal
@@ -93,11 +89,9 @@ export const WorkerRecommendationsPage: React.FC = () => {
       const res = await api.post('/recommendations/explain', { jobId: job._id });
       if (res.data?.success && res.data?.aiExplanation) {
         setAiText(res.data.aiExplanation.explanation);
-        setAiSource(res.data.aiExplanation.source);
       }
-    } catch (err: any) {
+    } catch {
       setAiText('Matches your listed competencies and preferred compensation range.');
-      setAiSource('fallback-engine');
     } finally {
       setIsAiLoading(false);
     }

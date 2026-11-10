@@ -22,6 +22,9 @@ interface AuthContextType {
   logout: () => void;
   refreshUser: () => Promise<void>;
   demoLogin: (demoRole: 'worker' | 'worker2' | 'employer' | 'admin') => Promise<User>;
+  switchRole: (role: Role) => Promise<User>;
+  enableEmployer: (data: { businessName: string; businessCategory?: string; businessAddress?: string }) => Promise<User>;
+  enableWorker: (data?: { skills?: string[]; preferredCategories?: string[] }) => Promise<User>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -98,6 +101,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return login(email, password);
   };
 
+  const switchRole = async (role: Role): Promise<User> => {
+    const res = await api.patch('/auth/active-role', { role });
+    const { token: newToken, user: newUser } = res.data;
+    if (newToken) {
+      localStorage.setItem('token', newToken);
+      setToken(newToken);
+    }
+    setUser(newUser);
+    return newUser;
+  };
+
+  const enableEmployer = async (data: { businessName: string; businessCategory?: string; businessAddress?: string }): Promise<User> => {
+    const res = await api.post('/auth/enable-employer', data);
+    const { token: newToken, user: newUser } = res.data;
+    if (newToken) {
+      localStorage.setItem('token', newToken);
+      setToken(newToken);
+    }
+    setUser(newUser);
+    return newUser;
+  };
+
+  const enableWorker = async (data?: { skills?: string[]; preferredCategories?: string[] }): Promise<User> => {
+    const res = await api.post('/auth/enable-worker', data || {});
+    const { token: newToken, user: newUser } = res.data;
+    if (newToken) {
+      localStorage.setItem('token', newToken);
+      setToken(newToken);
+    }
+    setUser(newUser);
+    return newUser;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -108,7 +144,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         register,
         logout,
         refreshUser,
-        demoLogin
+        demoLogin,
+        switchRole,
+        enableEmployer,
+        enableWorker
       }}
     >
       {children}

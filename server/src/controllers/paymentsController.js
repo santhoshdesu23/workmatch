@@ -13,7 +13,8 @@ export const VALID_PAYMENT_TRANSITIONS = {
 
 export const getMyPayments = async (req, res, next) => {
   try {
-    const isWorker = req.user.role === ROLES.WORKER;
+    const activeRole = req.query.role || req.user.activeRole || req.user.role;
+    const isWorker = activeRole === ROLES.WORKER;
     const filter = isWorker ? { worker: req.user._id } : { employer: req.user._id };
 
     const payments = await PaymentRecord.find(filter)

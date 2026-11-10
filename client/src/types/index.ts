@@ -7,11 +7,15 @@ export interface User {
   lastName?: string;
   email: string;
   role: Role;
+  roles?: Role[];
+  activeRole?: Role;
   emailVerified: boolean;
   verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected';
   accountStatus?: 'active' | 'suspended' | 'pending';
   lastLogin?: string;
   profile?: WorkerProfile | EmployerProfile | null;
+  workerProfile?: WorkerProfile | null;
+  employerProfile?: EmployerProfile | null;
 }
 
 export interface WorkerProfile {

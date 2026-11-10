@@ -3,12 +3,8 @@ import { Link } from 'react-router-dom';
 import {
   Users,
   Briefcase,
-  Layers,
   CalendarCheck2,
-  AlertTriangle,
-  BadgeCheck,
-  Activity,
-  ArrowRight
+  AlertTriangle
 } from 'lucide-react';
 import {
   BarChart,
@@ -82,7 +78,7 @@ export const AdminDashboardPage: React.FC = () => {
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
               WorkMatch Governance Center
             </h1>
-            <p className="text-xs text-slate-300 max-w-lg">
+            <p className="text-xs text-slate-300 max-w-2xl">
               Live database queries, verified trust records, incident moderation, and dispute queues.
             </p>
           </div>
@@ -98,7 +94,7 @@ export const AdminDashboardPage: React.FC = () => {
       </Card>
 
       {/* Primary Metrics Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5">
         <Card className="p-4 space-y-1">
           <div className="flex justify-between items-center text-slate-500 text-xs font-medium">
             <span>Registered Users</span>

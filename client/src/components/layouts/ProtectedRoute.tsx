@@ -27,11 +27,13 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    // If worker tried to access employer route, or employer tried worker route
-    if (user.role === 'worker') return <Navigate to="/worker/dashboard" replace />;
-    if (user.role === 'employer') return <Navigate to="/employer/dashboard" replace />;
-    if (user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
+  const userRoles = user.roles && user.roles.length > 0 ? user.roles : [user.role];
+  const hasAccess = !allowedRoles || allowedRoles.some((role) => userRoles.includes(role));
+
+  if (!hasAccess) {
+    if (user.activeRole === 'worker' || user.role === 'worker') return <Navigate to="/worker/dashboard" replace />;
+    if (user.activeRole === 'employer' || user.role === 'employer') return <Navigate to="/employer/dashboard" replace />;
+    if (user.activeRole === 'admin' || user.role === 'admin') return <Navigate to="/admin/dashboard" replace />;
     return <Navigate to="/" replace />;
   }
 

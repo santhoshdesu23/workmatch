@@ -12,7 +12,7 @@
 export const MAX_NAME_LENGTH = 30;
 
 // Matches unicode letters, combining marks, hyphens, apostrophes (straight and curly), periods, and spaces
-export const NAME_REGEX = /^[\p{L}\p{M}'’\-\. ]+$/u;
+export const NAME_REGEX = /^[\p{L}\p{M}'’\-. ]+$/u;
 
 /**
  * Validates a single name field (first name or last name).

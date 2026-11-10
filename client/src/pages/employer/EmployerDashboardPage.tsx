@@ -4,18 +4,16 @@ import {
   Briefcase,
   Users,
   Layers,
-  CalendarCheck2,
   DollarSign,
   PlusCircle,
   Building2,
   ShieldCheck,
   Clock,
-  Sparkles,
   ArrowRight
 } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { Job, Application } from '../../types';
+import { Application } from '../../types';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -84,7 +82,7 @@ export const EmployerDashboardPage: React.FC = () => {
                 {user?.name}'s Operations
               </span>
             </h1>
-            <p className="text-xs text-slate-300 max-w-lg">
+            <p className="text-xs text-slate-300 max-w-2xl">
               Manage temporary postings, candidate applications, shift attendance, and recorded compensation.
             </p>
           </div>
@@ -98,7 +96,7 @@ export const EmployerDashboardPage: React.FC = () => {
       </Card>
 
       {/* Live Metrics Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-5">
         <Card className="p-4 space-y-1">
           <div className="flex justify-between items-center text-slate-500 text-xs font-medium">
             <span>Active Shift Postings</span>

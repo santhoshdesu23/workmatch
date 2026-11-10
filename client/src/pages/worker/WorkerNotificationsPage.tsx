@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Bell, Check, CheckCheck, Clock, ExternalLink } from 'lucide-react';
+import { Bell, Check, CheckCheck, ExternalLink } from 'lucide-react';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { NotificationItem } from '../../types';

@@ -132,7 +132,7 @@ Return ONLY a valid JSON object with keys:
       const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
       const parsed = JSON.parse(cleanJson);
       return { ...defaultParsed, ...parsed, source: 'gemini-1.5-flash' };
-    } catch (err) {
+    } catch {
       return this.getLocalDeterministicQueryParser(query);
     }
   }

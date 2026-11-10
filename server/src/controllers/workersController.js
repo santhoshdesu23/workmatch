@@ -1,5 +1,4 @@
 import { WorkerProfile } from '../models/WorkerProfile.js';
-import { Job } from '../models/Job.js';
 import { User } from '../models/User.js';
 import { validateNameField } from '../utils/nameValidator.js';
 import {

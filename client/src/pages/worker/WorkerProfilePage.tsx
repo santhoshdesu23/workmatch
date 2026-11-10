@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   User,
-  MapPin,
-  Clock,
-  DollarSign,
-  Sparkles,
   ShieldCheck,
   Save,
   Plus,
   X,
-  Navigation
+  Navigation,
+  Briefcase,
+  ArrowRight,
+  CheckCircle,
+  Building2
 } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -24,11 +25,25 @@ import { NameInputField } from '../../components/common/NameInputField';
 import { validateName } from '../../utils/nameValidation';
 
 export const WorkerProfilePage: React.FC = () => {
-  const { user, refreshUser } = useAuth();
-  const { success, error: toastError, info } = useToast();
+  const { user, refreshUser, enableEmployer, switchRole } = useAuth();
+  const { success, error: toastError } = useToast();
+  const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Dual-role states
+  const [empBusinessName, setEmpBusinessName] = useState('');
+  const [empCategory, setEmpCategory] = useState('');
+  const [empAddress, setEmpAddress] = useState('');
+  const [enablingEmployer, setEnablingEmployer] = useState(false);
+  const [showEmployerForm, setShowEmployerForm] = useState(false);
+
+  useEffect(() => {
+    if (window.location.hash === '#become-employer') {
+      setShowEmployerForm(true);
+    }
+  }, []);
 
   // Form states
   const [firstName, setFirstName] = useState('');
@@ -571,6 +586,155 @@ export const WorkerProfilePage: React.FC = () => {
           </Button>
         </div>
       </form>
+
+      {/* Dual Workspace & Role Section */}
+      <div id="become-employer">
+        <Card className="p-6 space-y-4 border-slate-200">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-emerald-600" />
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Workspaces & Roles</h2>
+              <p className="text-xs text-slate-500">Operate seamlessly as both a worker and an employer from this single account.</p>
+            </div>
+          </div>
+          {user?.roles?.includes('employer') ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <CheckCircle className="w-3.5 h-3.5" /> Dual-Role Enabled
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
+              Worker Only
+            </span>
+          )}
+        </div>
+
+        {user?.roles?.includes('employer') ? (
+          <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-slate-800">Employer Workspace is Active</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Switch workspaces anytime from the top navigation bar or click below to open your Employer Hub.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={async () => {
+                await switchRole('employer');
+                navigate('/employer/dashboard');
+              }}
+              rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
+            >
+              Switch to Employer Hub
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="text-xs text-slate-600 space-y-1">
+              <p className="font-medium text-slate-800">Want to hire workers and post shifts?</p>
+              <p>
+                You can activate your Employer Workspace instantly without creating a separate account or changing your login credentials. Your worker profile, reviews, and applications will remain completely intact.
+              </p>
+            </div>
+
+            {!showEmployerForm ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowEmployerForm(true)}
+                leftIcon={<Briefcase className="w-3.5 h-3.5" />}
+              >
+                Become an Employer
+              </Button>
+            ) : (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!empBusinessName.trim()) {
+                    toastError('Please enter a business or brand name.');
+                    return;
+                  }
+                  try {
+                    setEnablingEmployer(true);
+                    await enableEmployer({
+                      businessName: empBusinessName.trim(),
+                      businessCategory: empCategory.trim() || undefined,
+                      businessAddress: empAddress.trim() || undefined
+                    });
+                    success('Employer workspace activated! Switched to Employer mode.');
+                    navigate('/employer/dashboard');
+                  } catch (err: any) {
+                    toastError(err?.response?.data?.message || err?.message || 'Failed to activate employer workspace.');
+                  } finally {
+                    setEnablingEmployer(false);
+                  }
+                }}
+                className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-3"
+              >
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Activate Employer Workspace
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">Business / Brand Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Apex Hospitality or Metro Logistics"
+                      value={empBusinessName}
+                      onChange={(e) => setEmpBusinessName(e.target.value)}
+                      className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">Industry Category</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Events, Warehouse, Food Service"
+                      value={empCategory}
+                      onChange={(e) => setEmpCategory(e.target.value)}
+                      className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Business Address (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 100 Main Street, Suite 400"
+                    value={empAddress}
+                    onChange={(e) => setEmpAddress(e.target.value)}
+                    className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowEmployerForm(false)}
+                    disabled={enablingEmployer}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    isLoading={enablingEmployer}
+                    leftIcon={<Briefcase className="w-3.5 h-3.5" />}
+                  >
+                    Activate Employer Role
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+      </Card>
+      </div>
+
       <AccountDeletionSection />
     </div>
   );

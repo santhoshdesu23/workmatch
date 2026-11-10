@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Search, ShieldCheck, ShieldAlert, CheckCircle2, XCircle } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { User } from '../../types';

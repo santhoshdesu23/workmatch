@@ -29,9 +29,7 @@ import {
   formatCalendarDate,
   isJobApplicationDeadlinePassed,
   isJobWorkEnded,
-  isJobWorkOngoing,
-  isJobOpenForApplications,
-  getEffectiveJobStatus
+  isJobWorkOngoing
 } from '../../utils/scheduleValidation';
 
 export const EmployerJobsPage: React.FC = () => {

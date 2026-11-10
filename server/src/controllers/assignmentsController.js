@@ -9,7 +9,8 @@ import { isJobWorkEnded, isJobWorkOngoing, isJobApplicationDeadlinePassed } from
 
 export const getMyAssignments = async (req, res, next) => {
   try {
-    const isWorker = req.user.role === ROLES.WORKER;
+    const activeRole = req.query.role || req.user.activeRole || req.user.role;
+    const isWorker = activeRole === ROLES.WORKER;
     const filter = isWorker ? { worker: req.user._id } : { employer: req.user._id };
 
     const assignments = await Assignment.find(filter)

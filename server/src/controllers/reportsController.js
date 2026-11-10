@@ -1,8 +1,5 @@
 import { Report } from '../models/Report.js';
 import { Job } from '../models/Job.js';
-import { Application } from '../models/Application.js';
-import { Assignment } from '../models/Assignment.js';
-import { ROLES } from '../config/constants.js';
 
 export const createReport = async (req, res, next) => {
   try {

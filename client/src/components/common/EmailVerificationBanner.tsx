@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Mail, CheckCircle2, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import api from '../../api/client';

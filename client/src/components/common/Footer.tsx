@@ -2,10 +2,12 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Briefcase, ShieldCheck, HeartHandshake, MapPin } from 'lucide-react';
 
+const currentYear = new Date().getFullYear();
+
 export const Footer: React.FC = () => {
   return (
     <footer className="bg-white border-t border-slate-200 mt-16 text-slate-600 text-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="w-full max-w-[1760px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Brand Info */}
           <div className="space-y-4 md:col-span-1">
@@ -61,7 +63,7 @@ export const Footer: React.FC = () => {
         </div>
 
         <div className="mt-12 pt-6 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-400">
-          <p>&copy; {new Date().getFullYear()} WorkMatch Inc. All rights reserved.</p>
+          <p>&copy; {currentYear} WorkMatch Inc. All rights reserved.</p>
           <div className="flex items-center gap-4">
             <span className="inline-flex items-center gap-1 text-emerald-600">
               <ShieldCheck className="w-3.5 h-3.5" /> Human-Governed AI Matching

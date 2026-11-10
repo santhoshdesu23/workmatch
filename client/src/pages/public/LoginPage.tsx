@@ -8,7 +8,7 @@ import { Card } from '../../components/common/Card';
 
 export const LoginPage: React.FC = () => {
   const { login, demoLogin } = useAuth();
-  const { success, error: toastError, info } = useToast();
+  const { success, error: toastError } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
 

@@ -1,7 +1,7 @@
 import { Job } from '../models/Job.js';
 import { WorkerProfile } from '../models/WorkerProfile.js';
 import { EmployerProfile } from '../models/EmployerProfile.js';
-import { JOB_STATUSES, ROLES } from '../config/constants.js';
+import { JOB_STATUSES } from '../config/constants.js';
 import {
   computeJobMatch,
   sanitizeSkills,

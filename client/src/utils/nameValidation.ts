@@ -5,7 +5,7 @@
 export const MAX_NAME_LENGTH = 30;
 
 // Preserves international unicode letters, combining marks, spaces, hyphens, apostrophes (straight & curly), and periods
-export const NAME_REGEX = /^[\p{L}\p{M}'’\-\. ]+$/u;
+export const NAME_REGEX = /^[\p{L}\p{M}'’\-. ]+$/u;
 
 export interface NameValidationResult {
   isValid: boolean;

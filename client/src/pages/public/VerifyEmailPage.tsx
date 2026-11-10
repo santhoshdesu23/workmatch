@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { Mail, CheckCircle2, AlertCircle, ArrowLeft, RefreshCw, Sparkles, ShieldCheck } from 'lucide-react';
+import { Mail, CheckCircle2, AlertCircle, ArrowLeft, RefreshCw, ShieldCheck } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -23,7 +23,7 @@ export const VerifyEmailPage: React.FC = () => {
         const remainingQuery = currentUrl.searchParams.toString();
         const cleanUrl = currentUrl.pathname + (remainingQuery ? `?${remainingQuery}` : '') + currentUrl.hash;
         window.history.replaceState({}, document.title, cleanUrl);
-      } catch (err) {
+      } catch {
         // Fallback: preserve path without query
         window.history.replaceState({}, document.title, window.location.pathname);
       }

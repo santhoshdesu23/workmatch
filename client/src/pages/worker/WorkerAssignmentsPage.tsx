@@ -1,14 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import {
   CalendarCheck2,
   Clock,
-  DollarSign,
-  Building2,
   CheckCircle2,
   Star,
-  MapPin,
-  AlertCircle
+  MapPin
 } from 'lucide-react';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -20,7 +16,7 @@ import { Modal } from '../../components/common/Modal';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { EmptyState } from '../../components/common/EmptyState';
 import { formatINR } from '../../utils/currency';
-import { isJobWorkEnded, isJobWorkOngoing } from '../../utils/scheduleValidation';
+import { isJobWorkEnded } from '../../utils/scheduleValidation';
 
 export const WorkerAssignmentsPage: React.FC = () => {
   const { success, error: toastError } = useToast();

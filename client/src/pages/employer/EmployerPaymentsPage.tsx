@@ -1,11 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   DollarSign,
-  Calendar,
-  CheckCircle2,
-  Clock,
-  ShieldCheck,
-  User,
   CreditCard
 } from 'lucide-react';
 import api from '../../api/client';

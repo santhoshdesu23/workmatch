@@ -32,6 +32,20 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Password is required']
     },
+    roles: {
+      type: [String],
+      enum: Object.values(ROLES),
+      default: function () {
+        return this.role ? [this.role] : [ROLES.WORKER];
+      }
+    },
+    activeRole: {
+      type: String,
+      enum: Object.values(ROLES),
+      default: function () {
+        return this.role || ROLES.WORKER;
+      }
+    },
     role: {
       type: String,
       enum: Object.values(ROLES),
@@ -105,7 +119,32 @@ userSchema.pre('validate', function (next) {
       this.lastName = parts.slice(1).join(' ')?.slice(0, 30) || parts[0]?.slice(0, 30) || '';
     }
   }
+
+  // Synchronize roles and activeRole with legacy role field
+  if (!this.roles || this.roles.length === 0) {
+    this.roles = this.role ? [this.role] : [ROLES.WORKER];
+  } else if (this.role && !this.roles.includes(this.role)) {
+    this.roles.push(this.role);
+  }
+  if (!this.activeRole) {
+    this.activeRole = this.role || this.roles[0] || ROLES.WORKER;
+  }
+  // Ensure legacy role matches activeRole
+  this.role = this.activeRole;
+
   next();
+});
+
+// Backward-compatibility guarantee for existing documents loaded from database
+userSchema.post('init', function () {
+  if (!this.roles || this.roles.length === 0) {
+    this.roles = this.role ? [this.role] : [ROLES.WORKER];
+  } else if (this.role && !this.roles.includes(this.role)) {
+    this.roles.push(this.role);
+  }
+  if (!this.activeRole) {
+    this.activeRole = this.role || this.roles[0] || ROLES.WORKER;
+  }
 });
 
 userSchema.methods.comparePassword = async function (candidatePassword) {

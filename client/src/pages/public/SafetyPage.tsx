@@ -1,13 +1,9 @@
 import React from 'react';
 import {
-  ShieldCheck,
   AlertTriangle,
-  FileCheck,
   CreditCard,
-  Lock,
   Flag,
-  UserCheck,
-  HelpCircle
+  UserCheck
 } from 'lucide-react';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';

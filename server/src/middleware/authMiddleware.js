@@ -19,7 +19,7 @@ export const requireAuth = async (req, res, next) => {
     let decoded;
     try {
       decoded = verifyToken(token);
-    } catch (err) {
+    } catch {
       return res.status(401).json({
         success: false,
         message: 'Session expired or invalid authentication token.'
@@ -89,7 +89,19 @@ export const requireRole = (...roles) => {
       });
     }
 
-    if (!roles.includes(req.user.role)) {
+    const userRoles = Array.from(
+      new Set(
+        [
+          ...(Array.isArray(req.user.roles) ? req.user.roles : []),
+          req.user.role,
+          req.user.activeRole
+        ].filter(Boolean)
+      )
+    );
+
+    const hasAllowedRole = roles.some((role) => userRoles.includes(role));
+
+    if (!hasAllowedRole) {
       return res.status(403).json({
         success: false,
         message: `Access denied. Requires one of the following roles: ${roles.join(', ')}.`
@@ -119,7 +131,7 @@ export const optionalAuth = async (req, res, next) => {
         }
       }
     }
-  } catch (err) {
+  } catch {
     // Continue without user
   }
   next();

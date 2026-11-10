@@ -1,17 +1,9 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import {
-  Compass,
-  Sparkles,
-  HeartHandshake,
-  ShieldCheck,
   Building2,
   UserCheck,
-  CheckCircle2,
-  DollarSign,
-  ArrowRight
+  CheckCircle2
 } from 'lucide-react';
-import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
 
 export const HowItWorksPage: React.FC = () => {

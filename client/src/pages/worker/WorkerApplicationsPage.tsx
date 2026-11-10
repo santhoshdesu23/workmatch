@@ -4,13 +4,9 @@ import {
   Layers,
   Calendar,
   Clock,
-  DollarSign,
   Building2,
   CheckCircle2,
-  XCircle,
-  AlertCircle,
-  History,
-  ArrowRight
+  History
 } from 'lucide-react';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';

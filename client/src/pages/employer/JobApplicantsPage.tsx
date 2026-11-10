@@ -5,13 +5,8 @@ import {
   ChevronLeft,
   Sparkles,
   CheckCircle2,
-  XCircle,
-  Clock,
   Send,
-  ShieldCheck,
-  Building2,
-  DollarSign,
-  AlertCircle
+  ShieldCheck
 } from 'lucide-react';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';

@@ -17,7 +17,7 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { EmptyState } from '../../components/common/EmptyState';
-import { isJobWorkEnded, isJobWorkOngoing } from '../../utils/scheduleValidation';
+import { isJobWorkEnded } from '../../utils/scheduleValidation';
 
 export const EmployerAssignmentsPage: React.FC = () => {
   const { success, error: toastError } = useToast();

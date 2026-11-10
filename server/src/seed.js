@@ -2,7 +2,6 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import bcrypt from 'bcryptjs';
-import mongoose from 'mongoose';
 import { connectDB, disconnectDB } from './config/db.js';
 import { User } from './models/User.js';
 import { WorkerProfile } from './models/WorkerProfile.js';
@@ -20,8 +19,7 @@ import {
   JOB_STATUSES,
   APPLICATION_STATUSES,
   ASSIGNMENT_STATUSES,
-  PAYMENT_STATUSES,
-  JOB_CATEGORIES
+  PAYMENT_STATUSES
 } from './config/constants.js';
 
 export async function runSeed() {

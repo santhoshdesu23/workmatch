@@ -5,10 +5,8 @@ import {
   Layers,
   Calendar,
   CalendarCheck2,
-  DollarSign,
   Bookmark,
   Bell,
-  ArrowRight,
   ShieldCheck,
   CheckCircle2,
   Clock,
@@ -18,7 +16,6 @@ import {
 } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { useToast } from '../../context/ToastContext';
 import { Job, Application, Assignment, NotificationItem, WorkerProfile } from '../../types';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -29,7 +26,6 @@ import { isJobWorkEnded } from '../../utils/scheduleValidation';
 
 export const WorkerDashboardPage: React.FC = () => {
   const { user } = useAuth();
-  const { toast } = useToast();
 
   const [profile, setProfile] = useState<WorkerProfile | null>(null);
   const [recommendations, setRecommendations] = useState<Job[]>([]);
@@ -114,7 +110,7 @@ export const WorkerDashboardPage: React.FC = () => {
                 Welcome back, {user?.name}
               </span>
             </h1>
-            <p className="text-xs text-emerald-100 max-w-lg">
+            <p className="text-xs text-emerald-100 max-w-2xl">
               Explore local temporary shifts matching your preferences. You retain full freedom to apply or decline.
             </p>
           </div>
@@ -154,7 +150,7 @@ export const WorkerDashboardPage: React.FC = () => {
       )}
 
       {/* Key Metrics Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5">
         <Card className="p-4 space-y-1">
           <div className="flex justify-between items-center text-slate-500 text-xs font-medium">
             <span>Active Applications</span>
@@ -201,7 +197,7 @@ export const WorkerDashboardPage: React.FC = () => {
       </div>
 
       {/* Two Column Layout: Recommended Shifts & Upcoming Shifts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
         {/* Left Column: Recommended Shifts */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">

@@ -1,5 +1,4 @@
 import React from 'react';
-import { Sparkles, Users, Target, ShieldCheck, Heart } from 'lucide-react';
 import { Card } from '../../components/common/Card';
 
 export const AboutPage: React.FC = () => {

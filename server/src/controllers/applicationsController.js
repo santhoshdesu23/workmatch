@@ -139,7 +139,8 @@ export const applyToJob = async (req, res, next) => {
 
 export const getMyApplications = async (req, res, next) => {
   try {
-    const isWorker = req.user.role === ROLES.WORKER;
+    const activeRole = req.query.role || req.user.activeRole || req.user.role;
+    const isWorker = activeRole === ROLES.WORKER;
     const filter = isWorker ? { worker: req.user._id } : { employer: req.user._id };
 
     const applications = await Application.find(filter)

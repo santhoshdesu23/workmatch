@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Bookmark, MapPin, Calendar, Clock, Building2, Trash2, ArrowRight } from 'lucide-react';
+import { Bookmark, MapPin, Calendar, Building2, Trash2, ArrowRight } from 'lucide-react';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { Job } from '../../types';
@@ -12,8 +12,7 @@ import { EmptyState } from '../../components/common/EmptyState';
 import { formatPayWithBasis } from '../../utils/currency';
 import {
   isJobApplicationDeadlinePassed,
-  isJobWorkEnded,
-  getEffectiveJobStatus
+  isJobWorkEnded
 } from '../../utils/scheduleValidation';
 
 export const WorkerSavedJobsPage: React.FC = () => {

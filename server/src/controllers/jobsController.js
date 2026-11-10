@@ -157,7 +157,7 @@ export const getJobs = async (req, res, next) => {
     }
 
     let workerProfile = null;
-    if (req.user && req.user.role === ROLES.WORKER) {
+    if (req.user && (req.user.role === ROLES.WORKER || (req.user.roles && req.user.roles.includes(ROLES.WORKER)))) {
       workerProfile = await WorkerProfile.findOne({ user: req.user._id });
     }
 

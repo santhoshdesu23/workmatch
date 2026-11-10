@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Mail, Lock, CheckCircle2, Building2, Clock } from 'lucide-react';
+import { ShieldCheck, Lock, CheckCircle2, Building2, Clock } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -16,7 +16,6 @@ export const EmployerSettingsPage: React.FC = () => {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Business verification state
-  const [businessName, setBusinessName] = useState('');
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [verificationType, setVerificationType] = useState('business_license');
   const [isSubmittingVerification, setIsSubmittingVerification] = useState(false);
@@ -84,7 +83,7 @@ export const EmployerSettingsPage: React.FC = () => {
       const res = await api.post('/auth/verification-request', {
         verificationType,
         submittedData: {
-          businessName: businessName.trim() || user?.name,
+          businessName: user?.name || '',
           registrationNumber: registrationNumber.trim(),
           documentType: verificationType
         }

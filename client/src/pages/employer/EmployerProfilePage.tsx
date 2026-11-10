@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, MapPin, Phone, Mail, Globe, ShieldCheck, Save, Navigation, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ShieldCheck, Save, Navigation, User, CheckCircle, ArrowRight, Briefcase } from 'lucide-react';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -13,11 +14,13 @@ import { NameInputField } from '../../components/common/NameInputField';
 import { validateName } from '../../utils/nameValidation';
 
 export const EmployerProfilePage: React.FC = () => {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, enableWorker, switchRole } = useAuth();
   const { success, error: toastError } = useToast();
+  const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [enablingWorker, setEnablingWorker] = useState(false);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -294,6 +297,83 @@ export const EmployerProfilePage: React.FC = () => {
           </Button>
         </div>
       </form>
+
+      {/* Dual Workspace & Role Section */}
+      <div id="become-worker">
+        <Card className="p-6 space-y-4 border-slate-200">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <User className="w-5 h-5 text-emerald-600" />
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Workspaces & Roles</h2>
+              <p className="text-xs text-slate-500">Operate seamlessly as both an employer and a worker from this single account.</p>
+            </div>
+          </div>
+          {user?.roles?.includes('worker') ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <CheckCircle className="w-3.5 h-3.5" /> Dual-Role Enabled
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
+              Employer Only
+            </span>
+          )}
+        </div>
+
+        {user?.roles?.includes('worker') ? (
+          <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-slate-800">Worker Workspace is Active</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Switch workspaces anytime from the top navigation bar or click below to view opportunities.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={async () => {
+                await switchRole('worker');
+                navigate('/worker/dashboard');
+              }}
+              rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
+            >
+              Switch to Worker Hub
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="text-xs text-slate-600 space-y-1">
+              <p className="font-medium text-slate-800">Want to pick up shifts and earn money as a worker?</p>
+              <p>
+                You can activate your Worker Workspace instantly without creating a separate account or changing your login credentials. Your employer profile, jobs, and candidate records will remain completely intact.
+              </p>
+            </div>
+
+            <Button
+              type="button"
+              size="sm"
+              isLoading={enablingWorker}
+              onClick={async () => {
+                try {
+                  setEnablingWorker(true);
+                  await enableWorker();
+                  success('Worker workspace activated! Switched to Worker mode.');
+                  navigate('/worker/dashboard');
+                } catch (err: any) {
+                  toastError(err?.response?.data?.message || err?.message || 'Failed to activate worker workspace.');
+                } finally {
+                  setEnablingWorker(false);
+                }
+              }}
+              leftIcon={<Briefcase className="w-3.5 h-3.5" />}
+            >
+              Activate Worker Role
+            </Button>
+          </div>
+        )}
+      </Card>
+      </div>
+
       <AccountDeletionSection />
     </div>
   );

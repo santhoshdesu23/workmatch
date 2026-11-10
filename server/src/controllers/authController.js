@@ -22,7 +22,7 @@ function validatePasswordStrength(password) {
   if (password.length > 128) {
     return 'Password cannot exceed 128 characters.';
   }
-  if (!/[0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+  if (!/[0-9!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) {
     return 'Password must contain at least one number or special character.';
   }
   return null;
@@ -170,6 +170,8 @@ export const register = async (req, res, next) => {
       name: finalName,
       email: normalizedEmail,
       passwordHash,
+      roles: [role],
+      activeRole: role,
       role,
       passwordChangedAt: new Date(),
       emailVerified: userEmailVerified,
@@ -211,7 +213,7 @@ export const register = async (req, res, next) => {
     const isLiveEmailProvider = provider === 'resend' || provider === 'brevo';
     const canExposeDevVerificationToken = process.env.NODE_ENV !== 'production' && !isLiveEmailProvider && !userEmailVerified;
 
-    const token = signToken({ id: user._id, role: user.role, tokenVersion: user.tokenVersion || 0 });
+    const token = signToken({ id: user._id, role: user.role, roles: user.roles, activeRole: user.activeRole, tokenVersion: user.tokenVersion || 0 });
 
     res.status(201).json({
       success: true,
@@ -229,9 +231,13 @@ export const register = async (req, res, next) => {
         lastName: user.lastName || (user.name ? user.name.split(/\s+/).slice(1).join(' ') : ''),
         email: user.email,
         role: user.role,
+        roles: user.roles,
+        activeRole: user.activeRole,
         emailVerified: user.emailVerified,
         verificationStatus: user.verificationStatus,
-        profile
+        profile,
+        workerProfile: role === ROLES.WORKER ? profile : null,
+        employerProfile: role === ROLES.EMPLOYER ? profile : null
       },
       ...(canExposeDevVerificationToken ? { devVerificationToken: verificationToken } : {})
     });
@@ -287,14 +293,22 @@ export const login = async (req, res, next) => {
     user.lastLogin = new Date();
     await user.save();
 
-    let profile = null;
-    if (user.role === ROLES.WORKER) {
-      profile = await WorkerProfile.findOne({ user: user._id });
-    } else if (user.role === ROLES.EMPLOYER) {
-      profile = await EmployerProfile.findOne({ user: user._id });
-    }
+    const roles = Array.isArray(user.roles) && user.roles.length > 0
+      ? user.roles
+      : (user.role ? [user.role] : [ROLES.WORKER]);
+    const activeRole = user.activeRole || user.role || roles[0];
 
-    const token = signToken({ id: user._id, role: user.role, tokenVersion: user.tokenVersion || 0 });
+    let workerProfile = null;
+    let employerProfile = null;
+    if (roles.includes(ROLES.WORKER)) {
+      workerProfile = await WorkerProfile.findOne({ user: user._id });
+    }
+    if (roles.includes(ROLES.EMPLOYER)) {
+      employerProfile = await EmployerProfile.findOne({ user: user._id });
+    }
+    const profile = activeRole === ROLES.EMPLOYER ? employerProfile : workerProfile;
+
+    const token = signToken({ id: user._id, role: activeRole, roles, activeRole, tokenVersion: user.tokenVersion || 0 });
 
     const nameParts = (user.name || '').trim().split(/\s+/);
     const firstName = user.firstName || nameParts[0] || '';
@@ -310,10 +324,14 @@ export const login = async (req, res, next) => {
         firstName,
         lastName,
         email: user.email,
-        role: user.role,
+        role: activeRole,
+        roles,
+        activeRole,
         emailVerified: user.emailVerified,
         verificationStatus: user.verificationStatus,
-        profile
+        profile,
+        workerProfile,
+        employerProfile
       }
     });
   } catch (error) {
@@ -324,13 +342,20 @@ export const login = async (req, res, next) => {
 export const getMe = async (req, res, next) => {
   try {
     const user = req.user;
-    let profile = null;
+    const roles = Array.isArray(user.roles) && user.roles.length > 0
+      ? user.roles
+      : (user.role ? [user.role] : [ROLES.WORKER]);
+    const activeRole = user.activeRole || user.role || roles[0];
 
-    if (user.role === ROLES.WORKER) {
-      profile = await WorkerProfile.findOne({ user: user._id });
-    } else if (user.role === ROLES.EMPLOYER) {
-      profile = await EmployerProfile.findOne({ user: user._id });
+    let workerProfile = null;
+    let employerProfile = null;
+    if (roles.includes(ROLES.WORKER)) {
+      workerProfile = await WorkerProfile.findOne({ user: user._id });
     }
+    if (roles.includes(ROLES.EMPLOYER)) {
+      employerProfile = await EmployerProfile.findOne({ user: user._id });
+    }
+    const profile = activeRole === ROLES.EMPLOYER ? employerProfile : workerProfile;
 
     const nameParts = (user.name || '').trim().split(/\s+/);
     const firstName = user.firstName || nameParts[0] || '';
@@ -344,11 +369,15 @@ export const getMe = async (req, res, next) => {
         firstName,
         lastName,
         email: user.email,
-        role: user.role,
+        role: activeRole,
+        roles,
+        activeRole,
         emailVerified: user.emailVerified,
         verificationStatus: user.verificationStatus,
         accountStatus: user.accountStatus,
-        profile
+        profile,
+        workerProfile,
+        employerProfile
       }
     });
   } catch (error) {
@@ -848,6 +877,307 @@ export const verifyRegistrationOtp = async (req, res, next) => {
       success: true,
       message: 'Email verified successfully!',
       verificationToken: verificationSessionToken
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Permanently activates the Employer role and workspace for an existing account.
+ * Idempotent, safe against duplicates, preserves all worker data.
+ */
+export const enableEmployer = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user || user.accountStatus === 'deleted' || user.accountStatus === 'suspended') {
+      return res.status(403).json({
+        success: false,
+        message: 'Account is not eligible for workspace activation.'
+      });
+    }
+
+    const { businessName, businessCategory, description, businessAddress, publicContact } = req.body || {};
+
+    if (!businessName || typeof businessName !== 'string' || !businessName.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Business or organization name is required to activate Employer workspace.'
+      });
+    }
+
+    if (businessName.trim().length > 150) {
+      return res.status(400).json({
+        success: false,
+        message: 'Business name cannot exceed 150 characters.'
+      });
+    }
+
+    // Atomically find or create EmployerProfile
+    let employerProfile = await EmployerProfile.findOne({ user: user._id });
+    if (!employerProfile) {
+      employerProfile = await EmployerProfile.create({
+        user: user._id,
+        businessName: businessName.trim(),
+        businessCategory: (businessCategory || 'General').trim().slice(0, 50),
+        description: (description || '').trim().slice(0, 1000),
+        businessAddress: (businessAddress || '').trim().slice(0, 200),
+        publicContact: {
+          phone: (publicContact?.phone || '').trim().slice(0, 30),
+          email: (publicContact?.email || '').trim().slice(0, 100),
+          website: (publicContact?.website || '').trim().slice(0, 150)
+        }
+      });
+    } else {
+      // If profile exists, optionally update fields if provided
+      if (businessName.trim()) employerProfile.businessName = businessName.trim();
+      if (businessCategory) employerProfile.businessCategory = businessCategory.trim().slice(0, 50);
+      if (description !== undefined) employerProfile.description = description.trim().slice(0, 1000);
+      if (businessAddress !== undefined) employerProfile.businessAddress = businessAddress.trim().slice(0, 200);
+      if (publicContact) {
+        employerProfile.publicContact = {
+          phone: (publicContact.phone || employerProfile.publicContact?.phone || '').trim().slice(0, 30),
+          email: (publicContact.email || employerProfile.publicContact?.email || '').trim().slice(0, 100),
+          website: (publicContact.website || employerProfile.publicContact?.website || '').trim().slice(0, 150)
+        };
+      }
+      await employerProfile.save();
+    }
+
+    // Atomically add employer to roles and set as activeRole
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      {
+        $addToSet: { roles: ROLES.EMPLOYER },
+        $set: { activeRole: ROLES.EMPLOYER, role: ROLES.EMPLOYER }
+      },
+      { new: true }
+    );
+
+    let workerProfile = null;
+    if (updatedUser.roles.includes(ROLES.WORKER)) {
+      workerProfile = await WorkerProfile.findOne({ user: updatedUser._id });
+    }
+
+    const token = signToken({
+      id: updatedUser._id,
+      role: ROLES.EMPLOYER,
+      roles: updatedUser.roles,
+      activeRole: ROLES.EMPLOYER,
+      tokenVersion: updatedUser.tokenVersion || 0
+    });
+
+    const nameParts = (updatedUser.name || '').trim().split(/\s+/);
+    const firstName = updatedUser.firstName || nameParts[0] || '';
+    const lastName = updatedUser.lastName || nameParts.slice(1).join(' ') || '';
+
+    res.status(200).json({
+      success: true,
+      message: 'Employer workspace activated successfully.',
+      token,
+      user: {
+        id: updatedUser._id,
+        name: updatedUser.name,
+        firstName,
+        lastName,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        roles: updatedUser.roles,
+        activeRole: updatedUser.activeRole,
+        emailVerified: updatedUser.emailVerified,
+        verificationStatus: updatedUser.verificationStatus,
+        accountStatus: updatedUser.accountStatus,
+        profile: employerProfile,
+        workerProfile,
+        employerProfile
+      },
+      employerProfile
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Permanently activates the Worker role and workspace for an existing account.
+ * Idempotent, safe against duplicates, preserves all employer data.
+ */
+export const enableWorker = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user || user.accountStatus === 'deleted' || user.accountStatus === 'suspended') {
+      return res.status(403).json({
+        success: false,
+        message: 'Account is not eligible for workspace activation.'
+      });
+    }
+
+    const { skills, experienceSummary, preferredCategories, travelRadiusKm, availability } = req.body || {};
+
+    // Atomically find or create WorkerProfile
+    let workerProfile = await WorkerProfile.findOne({ user: user._id });
+    if (!workerProfile) {
+      workerProfile = await WorkerProfile.create({
+        user: user._id,
+        skills: Array.isArray(skills) ? skills : [],
+        experienceSummary: (experienceSummary || '').trim().slice(0, 1000),
+        preferredCategories: Array.isArray(preferredCategories) ? preferredCategories : [],
+        travelRadiusKm: typeof travelRadiusKm === 'number' ? travelRadiusKm : 25,
+        availability: availability || { isAvailable: true, days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], timeSlots: ['Morning', 'Afternoon'] }
+      });
+    }
+
+    // Atomically add worker to roles and set as activeRole
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      {
+        $addToSet: { roles: ROLES.WORKER },
+        $set: { activeRole: ROLES.WORKER, role: ROLES.WORKER }
+      },
+      { new: true }
+    );
+
+    let employerProfile = null;
+    if (updatedUser.roles.includes(ROLES.EMPLOYER)) {
+      employerProfile = await EmployerProfile.findOne({ user: updatedUser._id });
+    }
+
+    const token = signToken({
+      id: updatedUser._id,
+      role: ROLES.WORKER,
+      roles: updatedUser.roles,
+      activeRole: ROLES.WORKER,
+      tokenVersion: updatedUser.tokenVersion || 0
+    });
+
+    const nameParts = (updatedUser.name || '').trim().split(/\s+/);
+    const firstName = updatedUser.firstName || nameParts[0] || '';
+    const lastName = updatedUser.lastName || nameParts.slice(1).join(' ') || '';
+
+    res.status(200).json({
+      success: true,
+      message: 'Worker workspace activated successfully.',
+      token,
+      user: {
+        id: updatedUser._id,
+        name: updatedUser.name,
+        firstName,
+        lastName,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        roles: updatedUser.roles,
+        activeRole: updatedUser.activeRole,
+        emailVerified: updatedUser.emailVerified,
+        verificationStatus: updatedUser.verificationStatus,
+        accountStatus: updatedUser.accountStatus,
+        profile: workerProfile,
+        workerProfile,
+        employerProfile
+      },
+      workerProfile
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Switches the active workspace for a dual-role or multi-role user.
+ * Validates that requested workspace is in the user's enabled roles.
+ */
+export const setActiveRole = async (req, res, next) => {
+  try {
+    const roleToSet = req.body?.activeRole || req.body?.role;
+
+    if (!roleToSet || typeof roleToSet !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'A valid role or activeRole is required.'
+      });
+    }
+
+    const normalizedRole = roleToSet.trim().toLowerCase();
+
+    if (![ROLES.WORKER, ROLES.EMPLOYER, ROLES.ADMIN].includes(normalizedRole)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid role '${roleToSet}'. Allowed roles: ${[ROLES.WORKER, ROLES.EMPLOYER].join(', ')}.`
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user || user.accountStatus === 'deleted' || user.accountStatus === 'suspended') {
+      return res.status(403).json({
+        success: false,
+        message: 'Account is not authorized to switch workspaces.'
+      });
+    }
+
+    const userRoles = Array.isArray(user.roles) && user.roles.length > 0
+      ? user.roles
+      : (user.role ? [user.role] : [ROLES.WORKER]);
+
+    // Prevent non-admins from self-assigning admin
+    if (normalizedRole === ROLES.ADMIN && !userRoles.includes(ROLES.ADMIN)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot switch to administrator workspace.'
+      });
+    }
+
+    if (!userRoles.includes(normalizedRole)) {
+      return res.status(403).json({
+        success: false,
+        message: `Cannot switch to '${normalizedRole}' workspace because it is not enabled on your account.`
+      });
+    }
+
+    user.activeRole = normalizedRole;
+    user.role = normalizedRole;
+    await user.save();
+
+    let workerProfile = null;
+    let employerProfile = null;
+    if (userRoles.includes(ROLES.WORKER)) {
+      workerProfile = await WorkerProfile.findOne({ user: user._id });
+    }
+    if (userRoles.includes(ROLES.EMPLOYER)) {
+      employerProfile = await EmployerProfile.findOne({ user: user._id });
+    }
+    const profile = normalizedRole === ROLES.EMPLOYER ? employerProfile : workerProfile;
+
+    const token = signToken({
+      id: user._id,
+      role: normalizedRole,
+      roles: user.roles,
+      activeRole: normalizedRole,
+      tokenVersion: user.tokenVersion || 0
+    });
+
+    const nameParts = (user.name || '').trim().split(/\s+/);
+    const firstName = user.firstName || nameParts[0] || '';
+    const lastName = user.lastName || nameParts.slice(1).join(' ') || '';
+
+    res.status(200).json({
+      success: true,
+      message: `Workspace switched to ${normalizedRole}.`,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        firstName,
+        lastName,
+        email: user.email,
+        role: normalizedRole,
+        roles: user.roles,
+        activeRole: normalizedRole,
+        emailVerified: user.emailVerified,
+        verificationStatus: user.verificationStatus,
+        accountStatus: user.accountStatus,
+        profile,
+        workerProfile,
+        employerProfile
+      }
     });
   } catch (error) {
     next(error);

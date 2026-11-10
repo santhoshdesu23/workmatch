@@ -10,7 +10,10 @@ import {
   resendVerification,
   submitVerificationRequest,
   sendRegistrationOtp,
-  verifyRegistrationOtp
+  verifyRegistrationOtp,
+  enableEmployer,
+  enableWorker,
+  setActiveRole
 } from '../controllers/authController.js';
 import { requireAuth, optionalAuth, requireRole } from '../middleware/authMiddleware.js';
 import { verificationRateLimiter } from '../middleware/rateLimiters.js';
@@ -29,6 +32,11 @@ router.delete('/account', requireAuth, requireRole(ROLES.WORKER, ROLES.EMPLOYER)
 router.post('/verify-email', verificationRateLimiter, verifyEmail);
 router.post('/resend-verification', verificationRateLimiter, optionalAuth, resendVerification);
 router.post('/verification-request', requireAuth, submitVerificationRequest);
+
+// Dual-role workspace activation and switching
+router.post('/enable-employer', requireAuth, enableEmployer);
+router.post('/enable-worker', requireAuth, enableWorker);
+router.patch('/active-role', requireAuth, setActiveRole);
 
 // 4-Digit Registration Email OTP Verification endpoints
 router.post('/send-otp', verificationRateLimiter, sendRegistrationOtp);
