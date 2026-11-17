@@ -34,4 +34,18 @@ describe('buildJobSearchParams', () => {
     assert.equal(params.get('locality'), 'Atigre');
     assert.equal(params.has('maxDistanceKm'), false);
   });
+
+  it('validates minPay ensuring non-negative numbers and omitting invalid values', () => {
+    const validParams = buildJobSearchParams({ minPay: '500' });
+    assert.equal(validParams.get('minPay'), '500');
+
+    const zeroParams = buildJobSearchParams({ minPay: '0' });
+    assert.equal(zeroParams.get('minPay'), '0');
+
+    const negativeParams = buildJobSearchParams({ minPay: '-100' });
+    assert.equal(negativeParams.has('minPay'), false);
+
+    const nanParams = buildJobSearchParams({ minPay: 'invalid' });
+    assert.equal(nanParams.has('minPay'), false);
+  });
 });

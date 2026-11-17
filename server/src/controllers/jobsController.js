@@ -596,6 +596,11 @@ export const createJob = async (req, res, next) => {
         type: 'Point',
         coordinates: coordinates && coordinates.length === 2 ? coordinates : [0, 0]
       },
+      attendanceRadiusMeters: req.body.attendanceRadiusMeters ? Number(req.body.attendanceRadiusMeters) : 200,
+      coordinatesConfirmed: Boolean(
+        req.body.coordinatesConfirmed ||
+        (coordinates && coordinates.length === 2 && (coordinates[0] !== 0 || coordinates[1] !== 0))
+      ),
       workDate: parsedWorkDate,
       workEndDate: parsedWorkEndDate,
       startTime: startTime.trim(),
@@ -700,6 +705,17 @@ export const updateJob = async (req, res, next) => {
     }
     if (req.body.endDate !== undefined && safeUpdates.workEndDate === undefined) {
       safeUpdates.workEndDate = req.body.endDate;
+    }
+
+    if (req.body.coordinates && Array.isArray(req.body.coordinates) && req.body.coordinates.length === 2) {
+      safeUpdates.location = { type: 'Point', coordinates: req.body.coordinates };
+      safeUpdates.coordinatesConfirmed = true;
+    }
+    if (req.body.coordinatesConfirmed !== undefined) {
+      safeUpdates.coordinatesConfirmed = Boolean(req.body.coordinatesConfirmed);
+    }
+    if (req.body.attendanceRadiusMeters !== undefined) {
+      safeUpdates.attendanceRadiusMeters = Number(req.body.attendanceRadiusMeters) || 200;
     }
 
     // Validate category

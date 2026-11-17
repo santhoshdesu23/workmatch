@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Users,
   CalendarCheck2,
@@ -6,7 +7,8 @@ import {
   DollarSign,
   CheckCircle2,
   Star,
-  MapPin
+  MapPin,
+  Navigation
 } from 'lucide-react';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -250,6 +252,18 @@ export const EmployerAssignmentsPage: React.FC = () => {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
+                    {assign.job?._id && (
+                      <Link to={`/employer/attendance/${assign.job._id}`}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          leftIcon={<Navigation className="w-3.5 h-3.5 text-emerald-600" />}
+                        >
+                          Attendance
+                        </Button>
+                      </Link>
+                    )}
+
                     {!assign.completionConfirmations?.employerConfirmed && (
                       <Button
                         size="sm"

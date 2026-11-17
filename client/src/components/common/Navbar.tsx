@@ -12,7 +12,8 @@ import {
   Layers,
   ChevronDown,
   ArrowLeftRight,
-  Check
+  Check,
+  Navigation
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -143,15 +144,37 @@ export const Navbar: React.FC = () => {
             </div>
           </Link>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-6">
+          {/* Desktop Navigation (Issue 4.1) */}
+          <nav className="hidden md:flex items-center gap-5 lg:gap-6">
             <Link
               to="/jobs"
               className={`text-sm font-medium transition-colors ${
                 location.pathname === '/jobs' ? 'text-emerald-600 font-semibold' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Find Work
+              Browse Jobs
+            </Link>
+            <Link
+              to={
+                currentRole === 'employer'
+                  ? '/employer/jobs/create'
+                  : currentRole === 'worker'
+                  ? (canBecomeEmployer ? '/worker/profile#become-employer' : '/employer/jobs/create')
+                  : '/login?returnTo=/employer/jobs/create'
+              }
+              className={`text-sm font-medium transition-colors ${
+                location.pathname === '/employer/jobs/create' ? 'text-emerald-600 font-semibold' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Post Shift
+            </Link>
+            <Link
+              to="/safety"
+              className={`text-sm font-medium transition-colors ${
+                location.pathname === '/safety' ? 'text-emerald-600 font-semibold' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Safety
             </Link>
             <Link
               to="/how-it-works"
@@ -160,22 +183,6 @@ export const Navbar: React.FC = () => {
               }`}
             >
               How It Works
-            </Link>
-            <Link
-              to="/safety"
-              className={`text-sm font-medium transition-colors ${
-                location.pathname === '/safety' ? 'text-emerald-600 font-semibold' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Trust & Safety
-            </Link>
-            <Link
-              to="/about"
-              className={`text-sm font-medium transition-colors ${
-                location.pathname === '/about' ? 'text-emerald-600 font-semibold' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              About
             </Link>
           </nav>
 
@@ -357,6 +364,9 @@ export const Navbar: React.FC = () => {
                           <Link to="/worker/profile" className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
                             <UserIcon className="w-4 h-4 text-slate-400" /> Worker Profile
                           </Link>
+                          <Link to="/worker/attendance" className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                            <Navigation className="w-4 h-4 text-emerald-600" /> Shift Attendance
+                          </Link>
                           <Link to="/worker/applications" className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
                             <Layers className="w-4 h-4 text-slate-400" /> My Applications
                           </Link>
@@ -367,6 +377,9 @@ export const Navbar: React.FC = () => {
                         <>
                           <Link to="/employer/profile" className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
                             <UserIcon className="w-4 h-4 text-slate-400" /> Business Profile
+                          </Link>
+                          <Link to="/employer/attendance" className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                            <Navigation className="w-4 h-4 text-emerald-600" /> Worker Attendance
                           </Link>
                           <Link to="/employer/jobs" className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50">
                             <Briefcase className="w-4 h-4 text-slate-400" /> My Postings
@@ -408,13 +421,13 @@ export const Navbar: React.FC = () => {
                   to="/login"
                   className="text-sm font-medium text-slate-700 hover:text-slate-900 px-3.5 py-2 rounded-xl hover:bg-slate-100 transition-colors"
                 >
-                  Log In
+                  Sign In
                 </Link>
                 <Link
                   to="/register"
                   className="text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-xl shadow-xs transition-colors"
                 >
-                  Sign Up
+                  Get Started
                 </Link>
               </div>
             )}
@@ -441,7 +454,27 @@ export const Navbar: React.FC = () => {
             onClick={() => setIsMobileMenuOpen(false)}
             className="block text-sm font-medium text-slate-700 py-1.5"
           >
-            Find Work
+            Browse Jobs
+          </Link>
+          <Link
+            to={
+              currentRole === 'employer'
+                ? '/employer/jobs/create'
+                : currentRole === 'worker'
+                ? (canBecomeEmployer ? '/worker/profile#become-employer' : '/employer/jobs/create')
+                : '/login?returnTo=/employer/jobs/create'
+            }
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="block text-sm font-medium text-slate-700 py-1.5"
+          >
+            Post Shift
+          </Link>
+          <Link
+            to="/safety"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="block text-sm font-medium text-slate-700 py-1.5"
+          >
+            Safety
           </Link>
           <Link
             to="/how-it-works"
@@ -449,20 +482,6 @@ export const Navbar: React.FC = () => {
             className="block text-sm font-medium text-slate-700 py-1.5"
           >
             How It Works
-          </Link>
-          <Link
-            to="/safety"
-            onClick={() => setIsMobileMenuOpen(false)}
-            className="block text-sm font-medium text-slate-700 py-1.5"
-          >
-            Trust & Safety
-          </Link>
-          <Link
-            to="/about"
-            onClick={() => setIsMobileMenuOpen(false)}
-            className="block text-sm font-medium text-slate-700 py-1.5"
-          >
-            About WorkMatch
           </Link>
 
           <div className="pt-3 border-t border-slate-100">
@@ -534,6 +553,13 @@ export const Navbar: React.FC = () => {
                       My Applications
                     </Link>
                     <Link
+                      to="/worker/attendance"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block text-sm font-medium text-emerald-600 py-1"
+                    >
+                      Shift Attendance (GPS)
+                    </Link>
+                    <Link
                       to="/worker/profile"
                       onClick={() => setIsMobileMenuOpen(false)}
                       className="block text-sm font-medium text-slate-700 py-1"
@@ -573,6 +599,13 @@ export const Navbar: React.FC = () => {
                       className="block text-sm font-medium text-slate-700 py-1"
                     >
                       My Postings
+                    </Link>
+                    <Link
+                      to="/employer/attendance"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block text-sm font-medium text-emerald-600 py-1"
+                    >
+                      Worker Attendance
                     </Link>
                     <Link
                       to="/employer/profile"
@@ -631,14 +664,14 @@ export const Navbar: React.FC = () => {
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="text-center text-sm font-medium text-slate-700 border border-slate-200 py-2 rounded-xl"
                 >
-                  Log In
+                  Sign In
                 </Link>
                 <Link
                   to="/register"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="text-center text-sm font-medium text-white bg-emerald-600 py-2 rounded-xl"
                 >
-                  Sign Up
+                  Get Started
                 </Link>
               </div>
             )}

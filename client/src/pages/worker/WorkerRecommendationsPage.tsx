@@ -228,7 +228,7 @@ export const WorkerRecommendationsPage: React.FC = () => {
               {formatPayWithBasis(job.grossPay, job.payBasis)}
             </div>
             <span className="text-[11px] text-slate-400">
-              {job.openings - job.filledCount} opening{job.openings === 1 ? '' : 's'} remaining
+              {Math.max(0, job.openings - job.filledCount)} {Math.max(0, job.openings - job.filledCount) === 1 ? 'opening' : 'openings'} remaining
             </span>
           </div>
 

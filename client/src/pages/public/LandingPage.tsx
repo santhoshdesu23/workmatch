@@ -29,7 +29,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
 import { Badge } from '../../components/common/Badge';
-import { formatPayWithBasis, formatINR } from '../../utils/currency';
+import { formatPayWithBasis, formatINR, calculateShiftTotal } from '../../utils/currency';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { Job } from '../../types';
 
@@ -369,7 +369,7 @@ export const LandingPage: React.FC = () => {
                 month: 'short',
                 day: 'numeric'
               });
-              const estimatedTotal = (Number(job.grossPay || 0) * Number(job.totalHours || 1)).toFixed(2);
+              const estimatedTotal = calculateShiftTotal(job.grossPay, job.payBasis, job.totalHours);
               const spotsLeft = Math.max(0, (job.openings || 1) - (job.filledCount || 0));
 
               return (
@@ -769,7 +769,7 @@ export const LandingPage: React.FC = () => {
 
             <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-600 space-y-1">
               <p className="font-semibold text-slate-800">Human-Readable Explanation:</p>
-              <p>“Matches your Guest Registration skills; shift is scheduled on your available Saturday; pay rate ($28/hr) exceeds your target rate.”</p>
+              <p>“Matches your Guest Registration skills; shift is scheduled on your available Saturday; pay rate (₹200/hr) exceeds your target rate.”</p>
             </div>
           </div>
         </div>

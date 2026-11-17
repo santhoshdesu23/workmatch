@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "node --test src/utils/jobSearchParams.test.mjs src/utils/scheduleValidation.test.mjs src/utils/nlSearchUtils.test.mjs src/utils/locationValidation.test.mjs src/tests/frontend_audit.test.mjs",
+    "test": "node --test src/utils/jobSearchParams.test.mjs src/utils/scheduleValidation.test.mjs src/utils/nlSearchUtils.test.mjs src/utils/locationValidation.test.mjs src/utils/currency.test.mjs src/tests/api_retry.test.mjs src/tests/auth_redirect.test.mjs src/tests/frontend_audit.test.mjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },

@@ -36,6 +36,7 @@ import { WorkerPaymentsPage } from './pages/worker/WorkerPaymentsPage';
 import { WorkerReviewsPage } from './pages/worker/WorkerReviewsPage';
 import { WorkerNotificationsPage } from './pages/worker/WorkerNotificationsPage';
 import { WorkerSettingsPage } from './pages/worker/WorkerSettingsPage';
+import { WorkerAttendancePage } from './pages/worker/WorkerAttendancePage';
 
 // Employer Pages
 import { EmployerDashboardPage } from './pages/employer/EmployerDashboardPage';
@@ -48,13 +49,22 @@ import { EmployerPaymentsPage } from './pages/employer/EmployerPaymentsPage';
 import { EmployerReviewsPage } from './pages/employer/EmployerReviewsPage';
 import { EmployerNotificationsPage } from './pages/employer/EmployerNotificationsPage';
 import { EmployerSettingsPage } from './pages/employer/EmployerSettingsPage';
+import { EmployerAttendancePage } from './pages/employer/EmployerAttendancePage';
+import { JobAttendanceDetailPage } from './pages/employer/JobAttendanceDetailPage';
 
 // Admin Pages
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { AdminUsersPage } from './pages/admin/AdminUsersPage';
+import { AdminWorkersPage } from './pages/admin/AdminWorkersPage';
+import { AdminEmployersPage } from './pages/admin/AdminEmployersPage';
 import { AdminJobsPage } from './pages/admin/AdminJobsPage';
-import { AdminReportsPage } from './pages/admin/AdminReportsPage';
+import { AdminApplicationsPage } from './pages/admin/AdminApplicationsPage';
+import { AdminAttendancePage } from './pages/admin/AdminAttendancePage';
 import { AdminVerificationsPage } from './pages/admin/AdminVerificationsPage';
+import { AdminReportsPage } from './pages/admin/AdminReportsPage';
+import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
+import { AdminAuditLogsPage } from './pages/admin/AdminAuditLogsPage';
+import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
 
 export function App() {
   return (
@@ -96,6 +106,7 @@ export function App() {
               <Route path="saved-jobs" element={<WorkerSavedJobsPage />} />
               <Route path="applications" element={<WorkerApplicationsPage />} />
               <Route path="assignments" element={<WorkerAssignmentsPage />} />
+              <Route path="attendance" element={<WorkerAttendancePage />} />
               <Route path="payments" element={<WorkerPaymentsPage />} />
               <Route path="reviews" element={<WorkerReviewsPage />} />
               <Route path="notifications" element={<WorkerNotificationsPage />} />
@@ -118,6 +129,8 @@ export function App() {
               <Route path="jobs/create" element={<CreateJobPage />} />
               <Route path="jobs/:jobId/applicants" element={<JobApplicantsPage />} />
               <Route path="assignments" element={<EmployerAssignmentsPage />} />
+              <Route path="attendance" element={<EmployerAttendancePage />} />
+              <Route path="attendance/:jobId" element={<JobAttendanceDetailPage />} />
               <Route path="payments" element={<EmployerPaymentsPage />} />
               <Route path="reviews" element={<EmployerReviewsPage />} />
               <Route path="notifications" element={<EmployerNotificationsPage />} />
@@ -136,9 +149,16 @@ export function App() {
               <Route index element={<Navigate to="/admin/dashboard" replace />} />
               <Route path="dashboard" element={<AdminDashboardPage />} />
               <Route path="users" element={<AdminUsersPage />} />
+              <Route path="workers" element={<AdminWorkersPage />} />
+              <Route path="employers" element={<AdminEmployersPage />} />
               <Route path="jobs" element={<AdminJobsPage />} />
-              <Route path="reports" element={<AdminReportsPage />} />
+              <Route path="applications" element={<AdminApplicationsPage />} />
+              <Route path="attendance" element={<AdminAttendancePage />} />
               <Route path="verifications" element={<AdminVerificationsPage />} />
+              <Route path="reports" element={<AdminReportsPage />} />
+              <Route path="analytics" element={<AdminAnalyticsPage />} />
+              <Route path="audit-logs" element={<AdminAuditLogsPage />} />
+              <Route path="settings" element={<AdminSettingsPage />} />
             </Route>
 
             {/* Fallback */}

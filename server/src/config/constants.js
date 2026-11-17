@@ -11,7 +11,8 @@ export const JOB_STATUSES = {
   IN_PROGRESS: 'IN_PROGRESS',
   COMPLETED: 'COMPLETED',
   CANCELLED: 'CANCELLED',
-  EXPIRED: 'EXPIRED'
+  EXPIRED: 'EXPIRED',
+  SUSPENDED: 'SUSPENDED'
 };
 
 export const APPLICATION_STATUSES = {
@@ -62,6 +63,20 @@ export const JOB_CATEGORIES = [
   'Tutoring and event staffing',
   'Other lawful temporary work'
 ];
+
+export const ATTENDANCE_STATUSES = {
+  PENDING: 'pending',
+  PRESENT_GPS: 'present_gps',
+  PRESENT_MANUAL: 'present_manual',
+  ABSENT_MANUAL: 'absent_manual'
+};
+
+export const ATTENDANCE_METHODS = {
+  GPS: 'GPS',
+  MANUAL: 'MANUAL'
+};
+
+export const ATTENDANCE_RADIUS_METERS = 200;
 
 export const MATCH_WEIGHTS = {
   SKILLS: 0.30,

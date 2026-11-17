@@ -127,6 +127,8 @@ export interface Job {
   ageRestriction: string;
   applicationDeadline: string;
   cancellationPolicy: string;
+  attendanceRadiusMeters?: number;
+  coordinatesConfirmed?: boolean;
   status: 'DRAFT' | 'OPEN' | 'FILLED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
   isDeadlinePassed?: boolean;
   isWorkEnded?: boolean;
@@ -399,4 +401,178 @@ export interface AppliedRequirement {
   value: any;
   type: 'HARD' | 'SOFT';
   source: 'UI_FILTER' | 'NLP_QUERY' | 'WORKER_PROFILE' | 'SEARCH_KEYWORD' | 'SAFETY_CONDITION' | 'EMPLOYER_MANDATORY';
+}
+
+export type AttendanceStatus = 'pending' | 'present_gps' | 'present_manual' | 'absent_manual';
+export type AttendanceMethod = 'GPS' | 'MANUAL';
+
+export interface AttendanceAuditEntry {
+  _id?: string;
+  action: 'CHECK_IN' | 'MANUAL_PRESENT' | 'MANUAL_ABSENT' | 'CORRECTION';
+  previousStatus?: string;
+  newStatus: string;
+  changedBy: {
+    _id?: string;
+    name?: string;
+    role?: string;
+    email?: string;
+  } | string;
+  reason?: string;
+  changedAt: string;
+  metadata?: any;
+}
+
+export interface Attendance {
+  _id?: string;
+  id?: string;
+  job: string | Job;
+  worker: string | User;
+  employer: string | User;
+  assignment: string | Assignment;
+  status: AttendanceStatus;
+  method?: AttendanceMethod | null;
+  checkInCoordinates?: {
+    latitude: number;
+    longitude: number;
+  };
+  accuracyMeters?: number | null;
+  distanceMeters?: number | null;
+  checkedInAt?: string | null;
+  markedBy?: {
+    _id?: string;
+    name?: string;
+    role?: string;
+  } | string | null;
+  reason?: string;
+  auditHistory?: AttendanceAuditEntry[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface JobAttendanceWorkerItem {
+  assignmentId: string;
+  worker: {
+    _id: string;
+    name: string;
+    firstName?: string;
+    lastName?: string;
+    email: string;
+    verificationStatus?: string;
+  };
+  status: AttendanceStatus;
+  method?: AttendanceMethod | null;
+  checkedInAt?: string | null;
+  distanceMeters?: number | null;
+  accuracyMeters?: number | null;
+  reason?: string;
+  markedBy?: {
+    _id?: string;
+    name?: string;
+    role?: string;
+  } | null;
+  attendanceId?: string | null;
+  auditHistoryCount?: number;
+}
+
+export interface JobAttendanceDetailResponse {
+  job: {
+    id: string;
+    title: string;
+    locationName: string;
+    location: {
+      type: 'Point';
+      coordinates: [number, number];
+    };
+    workDate: string;
+    workEndDate?: string;
+    startTime: string;
+    endTime: string;
+    attendanceRadiusMeters: number;
+    coordinatesConfirmed?: boolean;
+  };
+  summary: {
+    totalSelected: number;
+    presentCount: number;
+    presentGpsCount: number;
+    presentManualCount: number;
+    absentCount: number;
+    pendingCount: number;
+  };
+  workers: JobAttendanceWorkerItem[];
+}
+
+// Admin Management Types
+export interface AdminDashboardStats {
+  totalUsers: number;
+  totalWorkers: number;
+  totalEmployers: number;
+  activeUsers: number;
+  suspendedUsers: number;
+  totalJobs: number;
+  activeJobs: number;
+  totalApplications: number;
+  totalAssignments: number;
+  selectedWorkers: number;
+  fillRate: number;
+  openReports: number;
+  pendingVerifications: number;
+  totalAttendance: number;
+  gpsAttendance: number;
+  manualAttendance: number;
+}
+
+export interface AdminTrendItem {
+  date: string;
+  total: number;
+  workers?: number;
+  employers?: number;
+  open?: number;
+  filled?: number;
+  expired?: number;
+  selected?: number;
+  rejected?: number;
+}
+
+export interface AdminCategoryStat {
+  category: string;
+  count: number;
+}
+
+export interface AdminCityStat {
+  city: string;
+  count: number;
+}
+
+export interface AdminAuditLog {
+  _id: string;
+  actor: {
+    _id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+  action: string;
+  resourceType: string;
+  resourceId?: string;
+  metadata?: Record<string, any>;
+  createdAt: string;
+}
+
+export interface AdminSettingsConfig {
+  allowedCategories: string[];
+  moderationRules: {
+    autoFlagExcessivePay: boolean;
+    maxHourlyRateINR: number;
+    maxPerShiftRateINR: number;
+    requireJobApproval: boolean;
+  };
+  attendanceConfig: {
+    maxGeofenceMeters: number;
+    allowEmployerManualMarking: boolean;
+  };
+  platformBanner: {
+    enabled: boolean;
+    message: string;
+    type: 'info' | 'warning' | 'alert';
+  };
 }

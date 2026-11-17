@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   CalendarCheck2,
   Clock,
   CheckCircle2,
   Star,
-  MapPin
+  MapPin,
+  Navigation
 } from 'lucide-react';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -262,6 +264,16 @@ export const WorkerAssignmentsPage: React.FC = () => {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
+                    <Link to="/worker/attendance">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        leftIcon={<Navigation className="w-3.5 h-3.5 text-emerald-600" />}
+                      >
+                        GPS Attendance
+                      </Button>
+                    </Link>
+
                     {!assign.completionConfirmations?.workerConfirmed && assign.status !== 'CANCELLED' && (
                       <Button
                         size="sm"

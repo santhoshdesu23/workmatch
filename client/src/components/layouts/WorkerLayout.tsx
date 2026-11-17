@@ -12,7 +12,8 @@ import {
   Star,
   Bell,
   Settings,
-  ShieldCheck
+  ShieldCheck,
+  Navigation
 } from 'lucide-react';
 import { Navbar } from '../common/Navbar';
 import { EmailVerificationBanner } from '../common/EmailVerificationBanner';
@@ -25,6 +26,7 @@ export const WorkerLayout: React.FC = () => {
     { label: 'Saved Jobs', to: '/worker/saved-jobs', icon: Bookmark },
     { label: 'Applications', to: '/worker/applications', icon: Layers },
     { label: 'Confirmed Shifts', to: '/worker/assignments', icon: CalendarCheck2 },
+    { label: 'Shift Attendance', to: '/worker/attendance', icon: Navigation },
     { label: 'Payment History', to: '/worker/payments', icon: DollarSign },
     { label: 'Worker Profile', to: '/worker/profile', icon: UserCheck },
     { label: 'Reviews', to: '/worker/reviews', icon: Star },

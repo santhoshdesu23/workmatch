@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   MapPin,
   Calendar,
@@ -29,7 +29,7 @@ import { Job, JobChangeHistoryItem, EmployerReliability } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
 import { Badge } from '../../components/common/Badge';
-import { formatPayWithBasis, formatINR } from '../../utils/currency';
+import { formatPayWithBasis, formatEstimatedTotal } from '../../utils/currency';
 import { Modal } from '../../components/common/Modal';
 import { ScoreBreakdown } from '../../components/common/ScoreBreakdown';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
@@ -45,6 +45,7 @@ export const JobDetailPage: React.FC = () => {
   const { user } = useAuth();
   const { success, error: toastError, info } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -189,11 +190,30 @@ export const JobDetailPage: React.FC = () => {
     };
   }, [jobId]);
 
+  const redirectToLogin = (action: 'apply' | 'report' = 'apply') => {
+    const returnPath = location.pathname + location.search;
+    navigate(`/login?returnTo=${encodeURIComponent(returnPath)}`, {
+      state: { from: returnPath, action }
+    });
+  };
+
+  // Restore intended action modal when returning from login
+  useEffect(() => {
+    if (job && user) {
+      const stateAction = (location.state as any)?.action;
+      if (stateAction === 'apply' && user.role === 'worker' && !job.userApplication) {
+        setIsApplyModalOpen(true);
+      } else if (stateAction === 'report') {
+        setIsReportModalOpen(true);
+      }
+    }
+  }, [job?._id, user?.id]);
+
   const handleApplySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
       info('Please log in or register as a worker to apply.');
-      navigate('/login');
+      redirectToLogin('apply');
       return;
     }
 
@@ -242,7 +262,7 @@ export const JobDetailPage: React.FC = () => {
     e.preventDefault();
     if (!user) {
       info('Please log in to submit an incident report.');
-      navigate('/login');
+      redirectToLogin('report');
       return;
     }
 
@@ -411,7 +431,7 @@ export const JobDetailPage: React.FC = () => {
               {formatPayWithBasis(job.grossPay, job.payBasis)}
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Estimated Total: {formatINR(job.grossPay * job.totalHours)} ({job.totalHours} hrs)
+              Estimated Total: {formatEstimatedTotal(job.grossPay, job.payBasis, job.totalHours)}
             </p>
           </div>
         </div>
@@ -443,7 +463,7 @@ export const JobDetailPage: React.FC = () => {
             ) : (
               <Button
                 onClick={() => {
-                  if (!user) navigate('/login');
+                  if (!user) redirectToLogin('apply');
                   else setIsApplyModalOpen(true);
                 }}
                 leftIcon={<Send className="w-4 h-4" />}
@@ -865,7 +885,7 @@ export const JobDetailPage: React.FC = () => {
               <p className="text-xs text-slate-500 leading-relaxed">
                 Log in as a worker to view personalized 5-factor compatibility scores and travel distance calculations.
               </p>
-              <Link to="/login">
+              <Link to={`/login?returnTo=${encodeURIComponent(location.pathname + location.search)}`}>
                 <Button variant="outline" size="sm" className="w-full">
                   Log In as Worker
                 </Button>

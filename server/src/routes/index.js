@@ -12,6 +12,8 @@ import reviewRoutes from './reviewRoutes.js';
 import reportRoutes from './reportRoutes.js';
 import notificationRoutes from './notificationRoutes.js';
 import adminRoutes from './adminRoutes.js';
+import attendanceRoutes from './attendanceRoutes.js';
+import locationRoutes from './locationRoutes.js';
 import { authRateLimiter, aiRateLimiter } from '../middleware/rateLimiters.js';
 
 const router = Router();
@@ -73,5 +75,7 @@ router.use('/reviews', reviewRoutes);
 router.use('/reports', reportRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/admin', adminRoutes);
+router.use('/attendance', attendanceRoutes);
+router.use('/location', locationRoutes);
 
 export default router;

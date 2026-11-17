@@ -89,6 +89,22 @@ export const requireRole = (...roles) => {
       });
     }
 
+    // Explicit security invariant for administrator role:
+    // Administrator privileges cannot be granted by activeRole switching;
+    // they must be persistently assigned in user.role or user.roles.
+    if (roles.includes('admin')) {
+      const isGenuineAdmin =
+        req.user.role === 'admin' ||
+        (Array.isArray(req.user.roles) && req.user.roles.includes('admin'));
+      if (!isGenuineAdmin) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. Dedicated administrator privileges required.'
+        });
+      }
+      return next();
+    }
+
     const userRoles = Array.from(
       new Set(
         [

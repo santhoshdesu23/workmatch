@@ -143,10 +143,11 @@ export const updatePaymentStatus = async (req, res, next) => {
     }
 
     // Notify worker about payment status change
+    const currencySymbol = updatedPayment.currency === 'USD' ? '$' : '₹';
     await createNotification({
       recipient: updatedPayment.worker,
       type: 'PAYMENT_UPDATE',
-      title: `Payment Update: $${updatedPayment.amount} (${status})`,
+      title: `Payment Update: ${currencySymbol}${updatedPayment.amount} (${status})`,
       message: `The payment status for "${updatedPayment.job?.title || 'your shift'}" was marked as ${status}. Method: ${updatedPayment.paymentMethod}.`,
       link: '/worker/payments'
     });
@@ -232,10 +233,11 @@ export const confirmWorkerPaymentReceipt = async (req, res, next) => {
     }
 
     // Notify employer that worker confirmed receipt
+    const receiptCurrencySymbol = updatedPayment.currency === 'USD' ? '$' : '₹';
     await createNotification({
       recipient: updatedPayment.employer,
       type: 'PAYMENT_UPDATE',
-      title: `Worker confirmed payment receipt: $${updatedPayment.amount}`,
+      title: `Worker confirmed payment receipt: ${receiptCurrencySymbol}${updatedPayment.amount}`,
       message: `${req.user.name} confirmed receiving payment for "${updatedPayment.job?.title || 'the shift'}".`,
       link: '/employer/assignments'
     });

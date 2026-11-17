@@ -3,8 +3,18 @@ export function buildJobSearchParams(filters) {
   const params = new URLSearchParams();
   if (filters.search) params.set('search', filters.search);
   if (filters.category) params.set('category', filters.category);
-  if (filters.minPay) params.set('minPay', filters.minPay);
-  if (filters.maxPay) params.set('maxPay', filters.maxPay);
+  if (filters.minPay !== undefined && filters.minPay !== null && filters.minPay !== '') {
+    const minPayNum = Number(filters.minPay);
+    if (!isNaN(minPayNum) && minPayNum >= 0) {
+      params.set('minPay', String(minPayNum));
+    }
+  }
+  if (filters.maxPay !== undefined && filters.maxPay !== null && filters.maxPay !== '') {
+    const maxPayNum = Number(filters.maxPay);
+    if (!isNaN(maxPayNum) && maxPayNum >= 0) {
+      params.set('maxPay', String(maxPayNum));
+    }
+  }
   if (filters.payBasis) params.set('payBasis', filters.payBasis);
   if (filters.workDate) params.set('workDate', filters.workDate);
   if (filters.shiftTiming) params.set('shiftTiming', filters.shiftTiming);

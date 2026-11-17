@@ -66,6 +66,7 @@ export const EmployerJobsPage: React.FC = () => {
   const [editStartTime, setEditStartTime] = useState('');
   const [editEndTime, setEditEndTime] = useState('');
   const [editGrossPay, setEditGrossPay] = useState<number>(0);
+  const [editPayBasis, setEditPayBasis] = useState<string>('hourly');
   const [editOpenings, setEditOpenings] = useState<number>(1);
   const [editReason, setEditReason] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -100,6 +101,7 @@ export const EmployerJobsPage: React.FC = () => {
     setEditStartTime(job.startTime);
     setEditEndTime(job.endTime);
     setEditGrossPay(job.grossPay);
+    setEditPayBasis(job.payBasis || 'hourly');
     setEditOpenings(job.openings);
     setEditReason('');
   };
@@ -148,6 +150,7 @@ export const EmployerJobsPage: React.FC = () => {
         startTime: editStartTime,
         endTime: editEndTime,
         grossPay: editGrossPay,
+        payBasis: editPayBasis,
         openings: editOpenings,
         reason: editReason
       };
@@ -519,7 +522,7 @@ export const EmployerJobsPage: React.FC = () => {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Offered Pay (₹)</label>
               <input
@@ -530,6 +533,18 @@ export const EmployerJobsPage: React.FC = () => {
                 onChange={(e) => setEditGrossPay(Number(e.target.value))}
                 className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
               />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Payment Basis</label>
+              <select
+                value={editPayBasis}
+                onChange={(e) => setEditPayBasis(e.target.value)}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white focus:outline-none cursor-pointer"
+              >
+                <option value="hourly">Hourly (₹/hr)</option>
+                <option value="shift">Shift-based Flat Rate</option>
+                <option value="daily">Daily Flat Rate</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Openings</label>

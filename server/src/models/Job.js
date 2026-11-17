@@ -86,6 +86,14 @@ const jobSchema = new mongoose.Schema(
         default: [0, 0]
       }
     },
+    attendanceRadiusMeters: {
+      type: Number,
+      default: 200
+    },
+    coordinatesConfirmed: {
+      type: Boolean,
+      default: false
+    },
     isDemo: {
       type: Boolean,
       default: false,
