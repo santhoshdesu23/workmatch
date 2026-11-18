@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   CheckCircle2,
   AlertCircle,
+  Briefcase,
   X
 } from 'lucide-react';
 import api from '../../api/client';
@@ -58,7 +59,23 @@ export const JobDiscoveryPage: React.FC = () => {
     exact: boolean;
     strong: boolean;
     partial: boolean;
-  }>({ exact: true, strong: true, partial: true });
+    other: boolean;
+  }>({ exact: true, strong: true, partial: true, other: true });
+
+  const matchedJobIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    if (mixedResults) {
+      (mixedResults.exact || []).forEach((j: any) => j._id && ids.add(String(j._id)));
+      (mixedResults.strong || []).forEach((j: any) => j._id && ids.add(String(j._id)));
+      (mixedResults.partial || []).forEach((j: any) => j._id && ids.add(String(j._id)));
+    }
+    return ids;
+  }, [mixedResults]);
+
+  const otherJobs = React.useMemo(() => {
+    if (!mixedResults) return [];
+    return jobs.filter((j: any) => !matchedJobIds.has(String(j._id)));
+  }, [jobs, matchedJobIds]);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [searchError, setSearchError] = useState<string>('');
@@ -322,7 +339,7 @@ export const JobDiscoveryPage: React.FC = () => {
     }
   };
 
-  const toggleSection = (section: 'exact' | 'strong' | 'partial') => {
+  const toggleSection = (section: 'exact' | 'strong' | 'partial' | 'other') => {
     setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
 
@@ -851,9 +868,9 @@ export const JobDiscoveryPage: React.FC = () => {
           <div className="flex items-center justify-between text-xs text-slate-500 px-1">
             <span>
               {formatOpenPositions(jobs.length)}
-              {mixedResults && (
+              {mixedResults && (matchCounts.total > 0 || otherJobs.length > 0) && (
                 <span className="ml-2 font-medium text-slate-700">
-                  ({matchCounts.exact} exact{showCloseMatches ? `, ${matchCounts.strong} strong, ${matchCounts.partial} partial` : ''})
+                  ({matchCounts.exact} exact{showCloseMatches ? `, ${matchCounts.strong} strong, ${matchCounts.partial} partial` : ''}{otherJobs.length > 0 ? `, ${otherJobs.length} other` : ''})
                 </span>
               )}
             </span>
@@ -998,8 +1015,38 @@ export const JobDiscoveryPage: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Message when close matches are disabled and exact matches are 0 */}
-                  {!showCloseMatches && matchCounts.exact === 0 && (
+                  {/* Tier 4: All Other Open Shifts (Guarantees every newly posted job is visible) */}
+                  {otherJobs.length > 0 && (
+                    <div className="space-y-3">
+                      <div
+                        onClick={() => toggleSection('other')}
+                        className="flex items-center justify-between p-3.5 rounded-xl bg-slate-100/90 border border-slate-200/90 cursor-pointer hover:bg-slate-200/60 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="w-4 h-4 text-slate-600 shrink-0" />
+                          <span className="text-sm font-bold text-slate-900">All Other Open Shifts</span>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 font-bold">
+                            {otherJobs.length}
+                          </span>
+                          <span className="text-xs text-slate-500 hidden sm:inline">
+                            – Verified shifts open for general applications
+                          </span>
+                        </div>
+                        <button type="button" className="text-slate-600" aria-label="Toggle Other Shifts">
+                          {openSections.other ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                      </div>
+
+                      {openSections.other && (
+                        <div className="space-y-3 pl-1 sm:pl-2">
+                          {otherJobs.map(renderJobCard)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Message when close matches are disabled and exact matches are 0 and no other jobs */}
+                  {!showCloseMatches && matchCounts.exact === 0 && otherJobs.length === 0 && (
                     <div className="p-6 text-center border border-dashed border-slate-300 rounded-2xl bg-slate-50 space-y-3">
                       <p className="text-sm text-slate-600 font-medium">
                         No exact matches found for your current criteria.

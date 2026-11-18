@@ -458,16 +458,21 @@ export function getJobApplicationDeadline(job: ShiftScheduleLike | null | undefi
           rawDeadline.getMinutes() === 0 &&
           rawDeadline.getSeconds() === 0);
 
-      if (
-        isMidnight &&
-        shiftStart &&
-        workDateParts &&
-        deadlineParts &&
-        deadlineParts.year === workDateParts.year &&
-        deadlineParts.monthIndex === workDateParts.monthIndex &&
-        deadlineParts.day === workDateParts.day
-      ) {
-        return shiftStart;
+      if (isMidnight && deadlineParts) {
+        if (
+          shiftStart &&
+          workDateParts &&
+          deadlineParts.year === workDateParts.year &&
+          deadlineParts.monthIndex === workDateParts.monthIndex &&
+          deadlineParts.day === workDateParts.day
+        ) {
+          return shiftStart;
+        }
+        const endOfDay = new Date(deadlineParts.year, deadlineParts.monthIndex, deadlineParts.day, 23, 59, 59, 999);
+        if (shiftStart && shiftStart < endOfDay) {
+          return shiftStart;
+        }
+        return endOfDay;
       }
       return rawDeadline;
     }

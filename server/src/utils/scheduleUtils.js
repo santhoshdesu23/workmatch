@@ -527,18 +527,23 @@ export function getJobApplicationDeadline(job) {
           rawDeadline.getMinutes() === 0 &&
           rawDeadline.getSeconds() === 0);
 
-      // When deadline was saved as a date-only value matching the shift start day at midnight,
-      // workers can apply up until the shift starts rather than prematurely expiring at 00:00.
-      if (
-        isMidnight &&
-        shiftStart &&
-        workDateParts &&
-        deadlineParts &&
-        deadlineParts.year === workDateParts.year &&
-        deadlineParts.monthIndex === workDateParts.monthIndex &&
-        deadlineParts.day === workDateParts.day
-      ) {
-        return shiftStart;
+      // When deadline was saved as a date-only value at midnight,
+      // workers can apply up until the shift starts (if on the same day) or end of that day (23:59:59.999).
+      if (isMidnight && deadlineParts) {
+        if (
+          shiftStart &&
+          workDateParts &&
+          deadlineParts.year === workDateParts.year &&
+          deadlineParts.monthIndex === workDateParts.monthIndex &&
+          deadlineParts.day === workDateParts.day
+        ) {
+          return shiftStart;
+        }
+        const endOfDay = new Date(deadlineParts.year, deadlineParts.monthIndex, deadlineParts.day, 23, 59, 59, 999);
+        if (shiftStart && shiftStart < endOfDay) {
+          return shiftStart;
+        }
+        return endOfDay;
       }
       return rawDeadline;
     }

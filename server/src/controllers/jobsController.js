@@ -108,19 +108,43 @@ export const getJobs = async (req, res, next) => {
     // Coordinate radius searches include nearby jobs even when their locality differs.
     const isCoordinateRadiusSearch = hasRadius && hasLat && hasLng;
     if (locality && !isCoordinateRadiusSearch) {
-      query.locality = { $regex: `^${escapeRegex(String(locality).trim())}$`, $options: 'i' };
+      const locTerm = escapeRegex(String(locality).trim());
+      query.$and = [...(query.$and || []), {
+        $or: [
+          { locality: { $regex: `^${locTerm}$`, $options: 'i' } },
+          { locationName: { $regex: locTerm, $options: 'i' } }
+        ]
+      }];
     }
 
     if (city && !isCoordinateRadiusSearch) {
-      query.city = { $regex: `^${escapeRegex(String(city).trim())}$`, $options: 'i' };
+      const cityTerm = escapeRegex(String(city).trim());
+      query.$and = [...(query.$and || []), {
+        $or: [
+          { city: { $regex: `^${cityTerm}$`, $options: 'i' } },
+          { locationName: { $regex: cityTerm, $options: 'i' } }
+        ]
+      }];
     }
 
     if (district && !isCoordinateRadiusSearch) {
-      query.district = { $regex: `^${escapeRegex(String(district).trim())}$`, $options: 'i' };
+      const distTerm = escapeRegex(String(district).trim());
+      query.$and = [...(query.$and || []), {
+        $or: [
+          { district: { $regex: `^${distTerm}$`, $options: 'i' } },
+          { locationName: { $regex: distTerm, $options: 'i' } }
+        ]
+      }];
     }
 
     if (state && !isCoordinateRadiusSearch) {
-      query.state = { $regex: `^${escapeRegex(String(state).trim())}$`, $options: 'i' };
+      const stateTerm = escapeRegex(String(state).trim());
+      query.$and = [...(query.$and || []), {
+        $or: [
+          { state: { $regex: `^${stateTerm}$`, $options: 'i' } },
+          { locationName: { $regex: stateTerm, $options: 'i' } }
+        ]
+      }];
     }
 
     if (location && !isCoordinateRadiusSearch) {
@@ -138,6 +162,8 @@ export const getJobs = async (req, res, next) => {
         }];
       }
     }
+
+    console.log(`[BrowseJobs] Query filters: ${JSON.stringify({ search, category, locality, city, district, state, minPay, maxPay, payBasis, workDate, maxDistanceKm: req.query.maxDistanceKm })}`);
 
     if (minPay || maxPay) {
       query.grossPay = {};
@@ -366,6 +392,8 @@ export const getJobs = async (req, res, next) => {
     const limitNum = Number(limit);
     const paginated = candidateJobs.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
+    console.log(`[BrowseJobs] Results: found ${jobs.length} open candidates in DB, returning ${paginated.length} paginated jobs (total=${total}).`);
+
     res.status(200).json({
       success: true,
       results: partitionResult.results,
@@ -584,6 +612,27 @@ export const createJob = async (req, res, next) => {
 
     const isConfirmed = detailsConfirmed !== false;
 
+    let resolvedLocality = req.body.locality?.trim() || '';
+    let resolvedCity = req.body.city?.trim() || '';
+    let resolvedDistrict = req.body.district?.trim() || '';
+    let resolvedState = req.body.state?.trim() || '';
+
+    if (locationName) {
+      const parts = locationName.split(',').map((p) => p.trim()).filter(Boolean);
+      if (!resolvedLocality && parts.length > 0) {
+        resolvedLocality = parts[0];
+      }
+      if (!resolvedCity && parts.length > 1) {
+        resolvedCity = parts[1];
+      }
+      if (!resolvedDistrict && parts.length > 2) {
+        resolvedDistrict = parts[2];
+      }
+      if (!resolvedState && parts.length > 3) {
+        resolvedState = parts[3];
+      }
+    }
+
     const job = await Job.create({
       employer: employerId,
       title: title.trim(),
@@ -592,6 +641,10 @@ export const createJob = async (req, res, next) => {
       requiredSkills: Array.isArray(requiredSkills) ? requiredSkills : (requiredSkills || '').split(',').map((s) => s.trim()).filter(Boolean),
       openings: Number(openings) || 1,
       locationName: locationName.trim(),
+      locality: resolvedLocality,
+      city: resolvedCity,
+      district: resolvedDistrict,
+      state: resolvedState,
       location: {
         type: 'Point',
         coordinates: coordinates && coordinates.length === 2 ? coordinates : [0, 0]
@@ -624,6 +677,8 @@ export const createJob = async (req, res, next) => {
       status
     });
 
+    console.log(`[JobCreation] Shift successfully published: ID=${job._id}, Title="${job.title}", Status="${job.status}", Employer="${employerId}"`);
+
     await EmployerProfile.findOneAndUpdate(
       { user: employerId },
       { $inc: { totalJobsPosted: 1 } }
@@ -635,6 +690,7 @@ export const createJob = async (req, res, next) => {
       job
     });
   } catch (error) {
+    console.error(`[JobCreation] Job creation failed for employer ${req.user?._id}:`, error.message);
     next(error);
   }
 };
