@@ -244,7 +244,7 @@ export const AdminJobsPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {jobs.map((j) => {
+                {jobs.filter((j) => Boolean(j && j._id)).map((j) => {
                   const payText = formatPayWithBasis(j.grossPay, j.payBasis);
                   const totalEst = formatEstimatedTotal(j.grossPay, j.payBasis, j.totalHours || 8);
 
@@ -252,7 +252,7 @@ export const AdminJobsPage: React.FC = () => {
                     <tr key={j._id} className="hover:bg-slate-50/50 transition-colors">
                       {/* Job Title */}
                       <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-900">{j.title}</div>
+                        <div className="font-semibold text-slate-900">{j.title || 'Untitled Shift'}</div>
                         <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
                           <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] text-slate-700">
                             {j.category || 'General'}
@@ -372,7 +372,7 @@ export const AdminJobsPage: React.FC = () => {
             setSelectedJob(null);
             setJobDetails(null);
           }}
-          title={`Job Details: ${selectedJob.title}`}
+          title={`Job Details: ${selectedJob?.title || 'Shift Listing'}`}
           maxWidth="lg"
         >
           {loadingDetails ? (
@@ -443,7 +443,7 @@ export const AdminJobsPage: React.FC = () => {
         <Modal
           isOpen={Boolean(moderatingJob)}
           onClose={() => setModeratingJob(null)}
-          title={`Job Moderation: ${moderatingJob.title}`}
+          title={`Job Moderation: ${moderatingJob?.title || 'Shift Listing'}`}
         >
           <form onSubmit={handleModerationSubmit} className="space-y-4">
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">

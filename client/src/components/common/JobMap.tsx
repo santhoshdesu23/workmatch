@@ -88,6 +88,7 @@ export const JobMap: React.FC<JobMapProps> = ({
 
     // Add markers for jobs
     jobs.forEach((job) => {
+      if (!job) return;
       if (
         job.location?.coordinates &&
         (job.location.coordinates[0] !== 0 || job.location.coordinates[1] !== 0)
@@ -100,9 +101,9 @@ export const JobMap: React.FC<JobMapProps> = ({
 
         const popupContent = `
           <div style="min-width: 180px; font-family: sans-serif;">
-            <div style="font-size: 12px; font-weight: 700; color: #0f172a; margin-bottom: 2px;">${job.title} ${demoTag}</div>
+            <div style="font-size: 12px; font-weight: 700; color: #0f172a; margin-bottom: 2px;">${job.title || 'Shift Listing'} ${demoTag}</div>
             <div style="font-size: 11px; color: #059669; font-weight: 600; margin-bottom: 4px;">${payDisplay}</div>
-            <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">${job.locationName}</div>
+            <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">${job.locationName || 'Venue on file'}</div>
             <a href="/jobs/${job._id}" style="display: inline-block; font-size: 11px; color: #059669; font-weight: 600; text-decoration: underline;">View Details &rarr;</a>
           </div>
         `;

@@ -73,12 +73,12 @@ export const WorkerSavedJobsPage: React.FC = () => {
         />
       ) : (
         <div className="space-y-3">
-          {savedJobs.map((job) => (
+          {savedJobs.filter((job) => Boolean(job && job._id)).map((job) => (
             <Card key={job._id} className="p-5">
               <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
                 <div className="space-y-1.5 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="emerald" size="sm">{job.category}</Badge>
+                    <Badge variant="emerald" size="sm">{job.category || 'Shift'}</Badge>
                     {(job.isWorkEnded ?? isJobWorkEnded(job)) ? (
                       <Badge variant="slate" size="sm">Past Shift</Badge>
                     ) : (job.isDeadlinePassed ?? isJobApplicationDeadlinePassed(job)) ? (
@@ -86,27 +86,27 @@ export const WorkerSavedJobsPage: React.FC = () => {
                     ) : job.status === 'OPEN' ? (
                       <Badge variant="blue" size="sm">Open</Badge>
                     ) : (
-                      <Badge variant="slate" size="sm">{job.status}</Badge>
+                      <Badge variant="slate" size="sm">{job.status || 'Active'}</Badge>
                     )}
                   </div>
                   <Link to={`/jobs/${job._id}`}>
                     <h3 className="text-base font-bold text-slate-900 hover:text-emerald-600 transition-colors">
-                      {job.title}
+                      {job.title || 'Saved Shift Opportunity'}
                     </h3>
                   </Link>
 
                   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                     <div className="flex items-center gap-1 min-w-0">
                       <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="truncate max-w-[180px] sm:max-w-xs" title={job.employer?.name}>{job.employer?.name}</span>
+                      <span className="truncate max-w-[180px] sm:max-w-xs" title={job.employer?.name}>{job.employer?.name || 'Local Employer'}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{job.locationName}</span>
+                      <span>{job.locationName || 'Venue location on file'}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{new Date(job.workDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                      <span>{job.workDate ? new Date(job.workDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Flexible Date'}</span>
                     </div>
                   </div>
                 </div>

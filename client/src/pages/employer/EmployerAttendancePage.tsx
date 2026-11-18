@@ -71,10 +71,13 @@ export const EmployerAttendancePage: React.FC = () => {
   }, []);
 
   const filteredJobs = jobs.filter((job) => {
+    if (!job) return false;
+    const title = job.title || '';
+    const loc = job.locationName || '';
     const matchesSearch =
-      job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.locationName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDate = !filterDate || job.workDate.slice(0, 10) === filterDate;
+      title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      loc.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDate = !filterDate || (job.workDate && job.workDate.slice(0, 10) === filterDate);
     return matchesSearch && matchesDate;
   });
 
@@ -172,7 +175,7 @@ export const EmployerAttendancePage: React.FC = () => {
                   <div className="space-y-2 min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h2 className="text-sm font-bold text-slate-900 hover:text-emerald-700 transition-colors">
-                        {job.title}
+                        {job?.title || 'Shift Position'}
                       </h2>
                       <Badge
                         variant={

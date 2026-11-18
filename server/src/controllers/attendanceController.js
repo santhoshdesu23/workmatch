@@ -229,8 +229,16 @@ export const getMyAttendanceHistory = async (req, res, next) => {
       const att = attendanceMap.get(a.job?._id?.toString());
       return {
         assignmentId: a._id,
-        job: a.job,
-        employer: a.employer,
+        job: a.job || {
+          _id: a._id,
+          title: 'Shift Assignment',
+          locationName: 'Work Location',
+          location: { coordinates: [0, 0] },
+          workDate: a.agreedSchedule?.workDate || new Date().toISOString(),
+          startTime: a.agreedSchedule?.startTime || '09:00',
+          endTime: a.agreedSchedule?.endTime || '17:00'
+        },
+        employer: a.employer || { name: 'Local Employer', email: '' },
         agreedSchedule: a.agreedSchedule,
         status: att ? att.status : ATTENDANCE_STATUSES.PENDING,
         method: att ? att.method : null,

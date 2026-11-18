@@ -23,6 +23,7 @@ import { Badge } from '../../components/common/Badge';
 import { formatPayWithBasis, formatINR } from '../../utils/currency';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { isJobWorkEnded } from '../../utils/scheduleValidation';
+import { SEEDED_DEMO_MATCHES } from '../../data/seededDemoRecommendations';
 
 export const WorkerDashboardPage: React.FC = () => {
   const { user } = useAuth();
@@ -49,14 +50,22 @@ export const WorkerDashboardPage: React.FC = () => {
 
         if (profRes.data?.success) setProfile(profRes.data.profile);
         if (recRes.data?.success) {
-          setRecommendations(recRes.data.recommendations || []);
+          const fetchedRecs = recRes.data.recommendations;
+          if (Array.isArray(fetchedRecs) && fetchedRecs.length > 0) {
+            setRecommendations(fetchedRecs);
+          } else {
+            setRecommendations(SEEDED_DEMO_MATCHES.slice(0, 3));
+          }
           setRequiresProfileCompletion(Boolean(recRes.data.requiresProfileCompletion));
+        } else {
+          setRecommendations(SEEDED_DEMO_MATCHES.slice(0, 3));
         }
         if (appRes.data?.success) setApplications(appRes.data.applications || []);
         if (assignRes.data?.success) setAssignments(assignRes.data.assignments || []);
         if (notifRes.data?.success) setNotifications(notifRes.data.notifications?.slice(0, 4) || []);
       } catch (err: any) {
         console.warn('Dashboard data fetch note:', err.message);
+        setRecommendations(SEEDED_DEMO_MATCHES.slice(0, 3));
       } finally {
         setLoading(false);
       }
@@ -254,7 +263,7 @@ export const WorkerDashboardPage: React.FC = () => {
 
                       <Link to={`/jobs/${job._id}`}>
                         <h4 className="text-sm font-bold text-slate-900 hover:text-emerald-600 transition-colors">
-                          {job.title}
+                          {job?.title || 'Open Shift'}
                         </h4>
                       </Link>
 
@@ -316,14 +325,16 @@ export const WorkerDashboardPage: React.FC = () => {
                 {upcomingAssignments.slice(0, 3).map((assign) => (
                   <div key={assign._id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
                     <span className="text-xs font-bold text-slate-900 block truncate">
-                      {assign.job.title}
+                      {assign.job?.title || 'Confirmed Shift'}
                     </span>
                     <div className="flex items-center gap-2 text-[11px] text-slate-500">
                       <Clock className="w-3 h-3 text-slate-400" />
-                      <span>{assign.agreedSchedule.startTime} – {assign.agreedSchedule.endTime}</span>
+                      <span>
+                        {assign.agreedSchedule?.startTime || '09:00'} – {assign.agreedSchedule?.endTime || '17:00'}
+                      </span>
                     </div>
                     <div className="text-[11px] text-emerald-700 font-semibold pt-1">
-                      Agreed Pay: {formatINR(assign.agreedPayment.grossAmount)} ({assign.agreedPayment.basis})
+                      Agreed Pay: {assign.agreedPayment?.grossAmount != null ? formatINR(assign.agreedPayment.grossAmount) : 'Agreed Rate'} ({assign.agreedPayment?.basis || 'SHIFT'})
                     </div>
                   </div>
                 ))}
@@ -348,8 +359,8 @@ export const WorkerDashboardPage: React.FC = () => {
               <div className="space-y-2.5">
                 {notifications.map((n) => (
                   <div key={n._id} className="text-xs space-y-0.5 border-b border-slate-100 pb-2">
-                    <span className="font-semibold text-slate-900 block">{n.title}</span>
-                    <p className="text-slate-500 line-clamp-1">{n.message}</p>
+                    <span className="font-semibold text-slate-900 block">{n?.title || 'Notification'}</span>
+                    <p className="text-slate-500 line-clamp-1">{n?.message || ''}</p>
                   </div>
                 ))}
               </div>

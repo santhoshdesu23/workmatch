@@ -246,32 +246,34 @@ export const WorkerAttendancePage: React.FC = () => {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-2 min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="text-sm font-bold text-slate-900">{shift.job.title}</h2>
+                      <h2 className="text-sm font-bold text-slate-900">{shift.job?.title || 'Scheduled Shift'}</h2>
                       {getStatusBadge(shift.status)}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-500">
                       <div className="flex items-center gap-1.5">
                         <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>Employer: {shift.employer.name}</span>
+                        <span>Employer: {shift.employer?.name || 'Local Employer'}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span className="line-clamp-1">{shift.job.locationName}</span>
+                        <span className="line-clamp-1">{shift.job?.locationName || 'Venue location on file'}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span>
-                          {new Date(shift.job.workDate).toLocaleDateString('en-IN', {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric'
-                          })}
+                          {shift.job?.workDate
+                            ? new Date(shift.job.workDate).toLocaleDateString('en-IN', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric'
+                              })
+                            : 'Date scheduled'}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>{shift.job.startTime} – {shift.job.endTime}</span>
+                        <span>{shift.job?.startTime || '09:00'} – {shift.job?.endTime || '17:00'}</span>
                       </div>
                     </div>
 
@@ -320,14 +322,14 @@ export const WorkerAttendancePage: React.FC = () => {
         >
           <div className="space-y-4">
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1.5 text-xs">
-              <div className="font-bold text-slate-900">{selectedShift.job.title}</div>
+              <div className="font-bold text-slate-900">{selectedShift.job?.title || 'Scheduled Shift'}</div>
               <div className="flex items-center gap-1.5 text-slate-600">
                 <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>{selectedShift.job.locationName}</span>
+                <span>{selectedShift.job?.locationName || 'Venue location on file'}</span>
               </div>
               <div className="flex items-center gap-1.5 text-slate-600">
                 <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>Shift Hours: {selectedShift.job.startTime} – {selectedShift.job.endTime}</span>
+                <span>Shift Hours: {selectedShift.job?.startTime || '09:00'} – {selectedShift.job?.endTime || '17:00'}</span>
               </div>
               <div className="text-[11px] text-emerald-700 font-semibold pt-1">
                 Required Radius: Within 200 metres of the venue

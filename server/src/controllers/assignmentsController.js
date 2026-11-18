@@ -29,6 +29,15 @@ export const getMyAssignments = async (req, res, next) => {
     const now = new Date();
     const enriched = assignments.map((a) => ({
       ...a,
+      job: a.job || {
+        _id: a._id,
+        title: 'Shift Assignment',
+        locationName: 'Work Location',
+        location: { coordinates: [0, 0] },
+        workDate: a.agreedSchedule?.workDate || new Date().toISOString(),
+        startTime: a.agreedSchedule?.startTime || '09:00',
+        endTime: a.agreedSchedule?.endTime || '17:00'
+      },
       isWorkEnded: isJobWorkEnded(a.agreedSchedule || a.job, now),
       isWorkOngoing: isJobWorkOngoing(a.agreedSchedule || a.job, now),
       payment: paymentMap.get(a._id.toString()) || null

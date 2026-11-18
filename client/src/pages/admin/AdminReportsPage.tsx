@@ -218,7 +218,7 @@ export const AdminReportsPage: React.FC = () => {
                       {r.reportedJob ? (
                         <div>
                           <span className="font-medium text-slate-900 block truncate max-w-[160px]">
-                            💼 {r.reportedJob.title}
+                            💼 {r.reportedJob?.title || 'Reported Shift'}
                           </span>
                         </div>
                       ) : r.reportedUser ? (

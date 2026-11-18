@@ -338,13 +338,15 @@ export const JobDiscoveryPage: React.FC = () => {
     'Tutoring and event staffing'
   ];
 
-  const renderJobCard = (job: Job) => (
+  const renderJobCard = (job: Job) => {
+    if (!job || !job._id) return null;
+    return (
     <Card key={job._id} hoverable className="p-5 transition-all">
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div className="space-y-2 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="emerald" size="sm">
-              {job.category}
+              {job.category || 'Shift'}
             </Badge>
 
             {/* Smart Matching Tier Badges */}
@@ -390,7 +392,7 @@ export const JobDiscoveryPage: React.FC = () => {
 
           <Link to={`/jobs/${job._id}`}>
             <h3 className="text-base font-bold text-slate-900 hover:text-emerald-600 transition-colors">
-              {job.title}
+              {job.title || 'Shift Listing'}
             </h3>
           </Link>
 
@@ -492,7 +494,8 @@ export const JobDiscoveryPage: React.FC = () => {
         </div>
       </div>
     </Card>
-  );
+    );
+  };
 
   const renderFilterFields = (_isMobile: boolean = false) => (
     <div className="space-y-4">

@@ -363,12 +363,14 @@ export const LandingPage: React.FC = () => {
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {featuredJobs.map((job) => {
-              const formattedDate = new Date(job.workDate).toLocaleDateString('en-US', {
-                weekday: 'short',
-                month: 'short',
-                day: 'numeric'
-              });
+            {featuredJobs.filter((job) => Boolean(job && job._id)).map((job) => {
+              const formattedDate = job.workDate
+                ? new Date(job.workDate).toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric'
+                  })
+                : 'Flexible Date';
               const estimatedTotal = calculateShiftTotal(job.grossPay, job.payBasis, job.totalHours);
               const spotsLeft = Math.max(0, (job.openings || 1) - (job.filledCount || 0));
 
@@ -410,7 +412,7 @@ export const LandingPage: React.FC = () => {
                     {/* Job Title */}
                     <div>
                       <h3 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
-                        {job.title}
+                        {job.title || 'Shift Opportunity'}
                       </h3>
                       <div className="flex items-center gap-1.5 text-xs text-slate-600 mt-1">
                         <Building2 className="w-3.5 h-3.5 text-slate-400" />
