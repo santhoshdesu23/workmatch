@@ -13,6 +13,7 @@ const defaultWeights = {
 };
 
 export const SEEDED_DEMO_MATCHES: Job[] = [
+  // --- TIER 1: EXACT MATCHES (90% - 100%) ---
   {
     _id: 'demo-catering-royal-banquet-01',
     seedId: 'demo-catering-royal-banquet-01',
@@ -175,8 +176,90 @@ export const SEEDED_DEMO_MATCHES: Job[] = [
     }
   },
   {
-    _id: 'demo-catering-corporate-gala-03',
-    seedId: 'demo-catering-corporate-gala-03',
+    _id: 'demo-catering-table-setup-03',
+    seedId: 'demo-catering-table-setup-03',
+    isDemo: true,
+    title: 'Wedding Mandap & Banquet Table Setup Assistant',
+    description: 'Assist with day-time floral arrangement positioning, banquet chair sashes, table linen laying, dinnerware placement, and stage decor organization before a grand evening reception.',
+    category: 'Wedding and catering support',
+    locationName: 'Shri Ram Karyalaya & Lawn, Tarabai Park, Kolhapur',
+    locality: 'Tarabai Park',
+    city: 'Kolhapur',
+    district: 'Kolhapur',
+    state: 'Maharashtra',
+    country: 'India',
+    location: {
+      type: 'Point',
+      coordinates: [74.2370, 16.7125]
+    },
+    workDate: new Date(now + 2 * oneDayMs).toISOString(),
+    workEndDate: new Date(now + 2 * oneDayMs).toISOString(),
+    startTime: '10:00',
+    endTime: '16:00',
+    breakDurationMinutes: 45,
+    totalHours: 5.25,
+    openings: 5,
+    filledCount: 1,
+    grossPay: 800,
+    payBasis: 'shift',
+    currency: 'INR',
+    paymentMethod: 'UPI',
+    paymentTiming: 'End of shift upon supervisor walk-through',
+    requiredSkills: ['Table Setup', 'Event Decoration', 'Teamwork', 'Attention to Detail'],
+    experienceRequirement: 'None, briefing given before shift start',
+    dressCode: 'Comfortable clothing and shoes for setting up tables and decor',
+    physicalRequirements: 'Lifting chairs and table centerpieces up to 8kg',
+    ageRestriction: '18+',
+    applicationDeadline: new Date(now + 2 * oneDayMs - 6 * 60 * 60 * 1000).toISOString(),
+    cancellationPolicy: 'Notice required 12 hours prior',
+    attendanceRadiusMeters: 200,
+    coordinatesConfirmed: true,
+    detailsConfirmed: true,
+    status: 'OPEN',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    employer: {
+      _id: 'emp-kolhapur-logistics',
+      name: 'Kolhapur Premium Events, Catering & Logistics',
+      email: 'kolhapur.logistics@workmatch.demo',
+      verificationStatus: 'verified'
+    },
+    employerProfile: {
+      businessName: 'Kolhapur Premium Events & Grand Catering',
+      verificationStatus: 'verified',
+      rating: { average: 4.9, count: 38 },
+      businessAddress: 'Station Road, Shahupuri, Kolhapur 416001'
+    },
+    distanceKm: 2.8,
+    matchType: 'exact',
+    matchData: {
+      matchScore: 93,
+      weights: defaultWeights,
+      componentScores: {
+        skills: 95,
+        location: 94,
+        availability: 92,
+        payment: 93,
+        categoryExperience: 94
+      },
+      matchedSkills: ['Table Setup', 'Teamwork', 'Attention to Detail'],
+      missingSkills: [],
+      distanceKm: 2.8,
+      dataCompleteness: 98,
+      warnings: [],
+      evaluatedAt: nowIso,
+      explanations: [
+        'Matches your banquet table and event setup preferences',
+        'Convenient daytime shift from 10:00 AM to 4:00 PM',
+        'Within 2.8 km of your selected preferred area'
+      ]
+    }
+  },
+
+  // --- TIER 2: STRONG MATCHES (80% - 89%) ---
+  {
+    _id: 'demo-catering-corporate-gala-04',
+    seedId: 'demo-catering-corporate-gala-04',
     isDemo: true,
     title: 'Corporate Gala Dinner Hospitality Crew',
     description: 'Hospitality crew required for an evening corporate business summit and gala dinner. Responsibilities include tray-passing welcome mocktails, hors d’oeuvres service, buffet oversight, and ensuring corporate attendees receive prompt hospitality.',
@@ -233,7 +316,7 @@ export const SEEDED_DEMO_MATCHES: Job[] = [
     matchType: 'strong',
     preferenceDifferences: ['Slightly earlier check-in than your standard preference'],
     matchData: {
-      matchScore: 88,
+      matchScore: 89,
       weights: defaultWeights,
       componentScores: {
         skills: 88,
@@ -256,8 +339,89 @@ export const SEEDED_DEMO_MATCHES: Job[] = [
     }
   },
   {
-    _id: 'demo-warehouse-logistics-04',
-    seedId: 'demo-warehouse-logistics-04',
+    _id: 'demo-hospitality-cafe-barista-05',
+    seedId: 'demo-hospitality-cafe-barista-05',
+    isDemo: true,
+    title: 'Cafe Barista & Counter Beverage Specialist',
+    description: 'Energetic counter associate needed for peak weekend rush at a popular artisan cafe. Assist with espresso drinks, cold brew preparation, customer billing, and table bussing.',
+    category: 'Restaurant and hospitality',
+    locationName: 'Artisan Roast & Bakery, Rajarampuri 2nd Lane, Kolhapur',
+    locality: 'Rajarampuri',
+    city: 'Kolhapur',
+    district: 'Kolhapur',
+    state: 'Maharashtra',
+    country: 'India',
+    location: {
+      type: 'Point',
+      coordinates: [74.2460, 16.6980]
+    },
+    workDate: new Date(now + 2 * oneDayMs).toISOString(),
+    workEndDate: new Date(now + 2 * oneDayMs).toISOString(),
+    startTime: '14:00',
+    endTime: '21:00',
+    breakDurationMinutes: 30,
+    totalHours: 6.5,
+    openings: 3,
+    filledCount: 1,
+    grossPay: 130,
+    payBasis: 'hourly',
+    currency: 'INR',
+    paymentMethod: 'UPI',
+    paymentTiming: 'Same day upon store closing',
+    requiredSkills: ['Beverage Service', 'POS Billing', 'Customer Service', 'Hygiene Standards'],
+    experienceRequirement: 'Prior cafe or beverage counter experience preferred',
+    dressCode: 'Black t-shirt, dark jeans, clean sneakers; branded apron provided',
+    physicalRequirements: 'Standing behind counter and moving beverage supplies',
+    ageRestriction: '18+',
+    applicationDeadline: new Date(now + 2 * oneDayMs - 4 * 60 * 60 * 1000).toISOString(),
+    cancellationPolicy: 'Notice required 8 hours prior',
+    attendanceRadiusMeters: 200,
+    coordinatesConfirmed: true,
+    detailsConfirmed: true,
+    status: 'OPEN',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    employer: {
+      _id: 'emp-artisan-roast',
+      name: 'Artisan Roast Kolhapur',
+      email: 'manager@artisanroast.demo',
+      verificationStatus: 'verified'
+    },
+    employerProfile: {
+      businessName: 'Artisan Roast Cafe & Bakehouse',
+      verificationStatus: 'verified',
+      rating: { average: 4.8, count: 31 },
+      businessAddress: 'Rajarampuri 2nd Lane, Kolhapur 416008'
+    },
+    distanceKm: 2.1,
+    matchType: 'strong',
+    preferenceDifferences: ['Afternoon to late evening schedule'],
+    matchData: {
+      matchScore: 87,
+      weights: defaultWeights,
+      componentScores: {
+        skills: 86,
+        location: 94,
+        availability: 88,
+        payment: 89,
+        categoryExperience: 88
+      },
+      matchedSkills: ['Beverage Service', 'Customer Service', 'Hygiene Standards'],
+      missingSkills: ['Latte Art'],
+      distanceKm: 2.1,
+      dataCompleteness: 94,
+      warnings: [],
+      evaluatedAt: nowIso,
+      explanations: [
+        'Great match for beverage preparation and hospitality skills',
+        'Convenient central location in Rajarampuri (~2.1 km away)',
+        'Attractive hourly rate of ₹130/hr with same-day digital payout'
+      ]
+    }
+  },
+  {
+    _id: 'demo-warehouse-logistics-06',
+    seedId: 'demo-warehouse-logistics-06',
     isDemo: true,
     title: 'Warehouse Logistics & Order Packing Assistant',
     description: 'Urgent packing and barcode scanning support needed for morning e-commerce dispatch. Responsibilities include sorting incoming regional parcels, bubble wrapping fragile items, packing dispatch boxes, and printing shipping manifests.',
@@ -337,8 +501,252 @@ export const SEEDED_DEMO_MATCHES: Job[] = [
     }
   },
   {
-    _id: 'demo-event-usher-expo-05',
-    seedId: 'demo-event-usher-expo-05',
+    _id: 'demo-catering-traditional-thali-07',
+    seedId: 'demo-catering-traditional-thali-07',
+    isDemo: true,
+    title: 'Traditional Wedding Dining Hall Thali Attendant',
+    description: 'Assist during traditional wedding lunch batches. Duties include traditional thali service, hot dal and rice replenishment, refilling water glasses, clearing patravali/plates, and keeping dining hall tables pristine between lunch batches.',
+    category: 'Wedding and catering support',
+    locationName: 'Padmavati Mangal Karyalaya, Station Road, Kolhapur',
+    locality: 'Station Road',
+    city: 'Kolhapur',
+    district: 'Kolhapur',
+    state: 'Maharashtra',
+    country: 'India',
+    location: {
+      type: 'Point',
+      coordinates: [74.2389, 16.7020]
+    },
+    workDate: new Date(now + 3 * oneDayMs).toISOString(),
+    workEndDate: new Date(now + 3 * oneDayMs).toISOString(),
+    startTime: '10:00',
+    endTime: '16:30',
+    breakDurationMinutes: 30,
+    totalHours: 6.0,
+    openings: 5,
+    filledCount: 2,
+    grossPay: 900,
+    payBasis: 'shift',
+    currency: 'INR',
+    paymentMethod: 'UPI',
+    paymentTiming: 'Same day cash/UPI upon shift conclusion',
+    requiredSkills: ['Traditional Thali Service', 'Fast Walking', 'Teamwork', 'Cleanliness'],
+    experienceRequirement: 'No prior experience needed; on-site instructions provided',
+    dressCode: 'Comfortable traditional or casual clothing, closed-toe footwear',
+    physicalRequirements: 'Bending, brisk walking, carrying serving buckets/trays',
+    ageRestriction: '18+',
+    applicationDeadline: new Date(now + 3 * oneDayMs - 8 * 60 * 60 * 1000).toISOString(),
+    cancellationPolicy: 'Notice required 12 hours prior',
+    attendanceRadiusMeters: 200,
+    coordinatesConfirmed: true,
+    detailsConfirmed: true,
+    status: 'OPEN',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    employer: {
+      _id: 'emp-kolhapur-logistics',
+      name: 'Kolhapur Premium Events, Catering & Logistics',
+      email: 'kolhapur.logistics@workmatch.demo',
+      verificationStatus: 'verified'
+    },
+    employerProfile: {
+      businessName: 'Kolhapur Premium Events & Grand Catering',
+      verificationStatus: 'verified',
+      rating: { average: 4.9, count: 38 },
+      businessAddress: 'Station Road, Shahupuri, Kolhapur 416001'
+    },
+    distanceKm: 1.8,
+    matchType: 'strong',
+    matchData: {
+      matchScore: 84,
+      weights: defaultWeights,
+      componentScores: {
+        skills: 85,
+        location: 98,
+        availability: 88,
+        payment: 92,
+        categoryExperience: 86
+      },
+      matchedSkills: ['Traditional Thali Service', 'Teamwork', 'Cleanliness'],
+      missingSkills: [],
+      distanceKm: 1.8,
+      dataCompleteness: 96,
+      warnings: [],
+      evaluatedAt: nowIso,
+      explanations: [
+        'Very close location near Station Road (~1.8 km away)',
+        'Attractive daily wage of ₹900 with immediate payment upon batch completion',
+        'Hearty lunch provided to all catering crew'
+      ]
+    }
+  },
+  {
+    _id: 'demo-warehouse-sweets-packaging-08',
+    seedId: 'demo-warehouse-sweets-packaging-08',
+    isDemo: true,
+    title: 'Festival Sweets & Gift Hamper Packaging Crew',
+    description: 'Carefully pack festive sweet boxes, dry fruit gift trays, and wedding return gift hampers. Responsibilities include weighing sweets accurately, placing decorative ribbons and labels, seal verification, and packing boxes into master shipping cartons.',
+    category: 'Warehouse and packing',
+    locationName: 'Shiroli MIDC Industrial Park, Kolhapur',
+    locality: 'Shiroli MIDC',
+    city: 'Kolhapur',
+    district: 'Kolhapur',
+    state: 'Maharashtra',
+    country: 'India',
+    location: {
+      type: 'Point',
+      coordinates: [74.3015, 16.7482]
+    },
+    workDate: new Date(now + 4 * oneDayMs).toISOString(),
+    workEndDate: new Date(now + 4 * oneDayMs).toISOString(),
+    startTime: '08:30',
+    endTime: '16:30',
+    breakDurationMinutes: 30,
+    totalHours: 7.5,
+    openings: 6,
+    filledCount: 2,
+    grossPay: 750,
+    payBasis: 'shift',
+    currency: 'INR',
+    paymentMethod: 'Bank Transfer',
+    paymentTiming: 'Direct bank transfer within 24 hours',
+    requiredSkills: ['Packaging', 'Quality Inspection', 'Box Assembly', 'Attention to Detail'],
+    experienceRequirement: 'Neat hand packaging skills',
+    dressCode: 'Comfortable casual wear, hairnets and clean gloves provided on site',
+    physicalRequirements: 'Sitting and standing at packaging stations',
+    ageRestriction: '18+',
+    applicationDeadline: new Date(now + 4 * oneDayMs - 12 * 60 * 60 * 1000).toISOString(),
+    cancellationPolicy: 'Notice required 24 hours prior',
+    attendanceRadiusMeters: 200,
+    coordinatesConfirmed: true,
+    detailsConfirmed: true,
+    status: 'OPEN',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    employer: {
+      _id: 'emp-kolhapur-logistics',
+      name: 'Kolhapur Premium Events, Catering & Logistics',
+      email: 'kolhapur.logistics@workmatch.demo',
+      verificationStatus: 'verified'
+    },
+    employerProfile: {
+      businessName: 'Kolhapur Premium Events & Grand Catering',
+      verificationStatus: 'verified',
+      rating: { average: 4.9, count: 38 },
+      businessAddress: 'Plot B-14, Shiroli MIDC, Kolhapur 416122'
+    },
+    distanceKm: 5.2,
+    matchType: 'strong',
+    preferenceDifferences: ['Requires early 08:30 AM arrival'],
+    matchData: {
+      matchScore: 82,
+      weights: defaultWeights,
+      componentScores: {
+        skills: 82,
+        location: 84,
+        availability: 88,
+        payment: 84,
+        categoryExperience: 84
+      },
+      matchedSkills: ['Packaging', 'Quality Inspection', 'Attention to Detail'],
+      missingSkills: [],
+      distanceKm: 5.2,
+      dataCompleteness: 92,
+      warnings: [],
+      evaluatedAt: nowIso,
+      explanations: [
+        'Clean, climate-controlled packaging facility',
+        'Straightforward task with clear assembly instructions provided',
+        'Direct digital transfer guaranteed within 24 hours'
+      ]
+    }
+  },
+
+  // --- TIER 3: PARTIAL MATCHES (70% - 79%) ---
+  {
+    _id: 'demo-retail-festive-store-09',
+    seedId: 'demo-retail-festive-store-09',
+    isDemo: true,
+    title: 'Retail Store Festive Display & Customer Assistant',
+    description: 'Assist high-traffic department store floor during the weekend shopping rush. Help customers locate apparel sizes, organize clothing hangers, manage fitting room check-ins, and restock display shelves.',
+    category: 'Retail and store assistance',
+    locationName: 'DYP City Mall, Kawala Naka, Kolhapur',
+    locality: 'Kawala Naka',
+    city: 'Kolhapur',
+    district: 'Kolhapur',
+    state: 'Maharashtra',
+    country: 'India',
+    location: {
+      type: 'Point',
+      coordinates: [74.2415, 16.7055]
+    },
+    workDate: new Date(now + 3 * oneDayMs).toISOString(),
+    workEndDate: new Date(now + 3 * oneDayMs).toISOString(),
+    startTime: '13:00',
+    endTime: '21:00',
+    breakDurationMinutes: 45,
+    totalHours: 7.25,
+    openings: 4,
+    filledCount: 1,
+    grossPay: 120,
+    payBasis: 'hourly',
+    currency: 'INR',
+    paymentMethod: 'UPI',
+    paymentTiming: 'Within 24 hours of shift sign-off',
+    requiredSkills: ['Customer Service', 'Store Display', 'Garment Folding', 'Patience'],
+    experienceRequirement: 'Friendly demeanor and polite customer interaction',
+    dressCode: 'Plain navy blue or black collared shirt, dark jeans, comfortable shoes',
+    physicalRequirements: 'Standing and walking on the retail sales floor',
+    ageRestriction: '18+',
+    applicationDeadline: new Date(now + 3 * oneDayMs - 6 * 60 * 60 * 1000).toISOString(),
+    cancellationPolicy: 'Notice required 12 hours prior',
+    attendanceRadiusMeters: 200,
+    coordinatesConfirmed: true,
+    detailsConfirmed: true,
+    status: 'OPEN',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    employer: {
+      _id: 'emp-dyp-retail',
+      name: 'DYP Retail Management',
+      email: 'careers@dypretail.demo',
+      verificationStatus: 'verified'
+    },
+    employerProfile: {
+      businessName: 'DYP City Mall Retailers',
+      verificationStatus: 'verified',
+      rating: { average: 4.6, count: 18 },
+      businessAddress: 'Kawala Naka, Kolhapur 416003'
+    },
+    distanceKm: 2.3,
+    matchType: 'partial',
+    preferenceDifferences: ['Retail assistance differs from primary hospitality preference'],
+    matchData: {
+      matchScore: 76,
+      weights: defaultWeights,
+      componentScores: {
+        skills: 72,
+        location: 95,
+        availability: 85,
+        payment: 82,
+        categoryExperience: 74
+      },
+      matchedSkills: ['Customer Service', 'Store Display'],
+      missingSkills: ['Billing Software'],
+      distanceKm: 2.3,
+      dataCompleteness: 90,
+      warnings: [],
+      evaluatedAt: nowIso,
+      explanations: [
+        'Close venue located at DYP City Mall (~2.3 km away)',
+        'Great opportunity for customer-facing retail support',
+        'Competitive hourly pay of ₹120/hr'
+      ]
+    }
+  },
+  {
+    _id: 'demo-event-usher-expo-10',
+    seedId: 'demo-event-usher-expo-10',
     isDemo: true,
     title: 'South Maharashtra Industrial Expo Event Usher & Host',
     description: 'Welcome registered trade delegates, scan QR code entry badges on tablet scanners, distribute event directories, and direct attendees to seminar halls during the South Maharashtra Tech & Industrial Expo.',
