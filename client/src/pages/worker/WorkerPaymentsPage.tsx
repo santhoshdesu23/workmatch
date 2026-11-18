@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Clock, CheckCircle2, ShieldCheck, Building2 } from 'lucide-react';
+import {
+  DollarSign,
+  Clock,
+  CheckCircle2,
+  ShieldCheck,
+  Building2,
+  Paperclip,
+  FileCheck,
+  Calendar,
+  MessageSquareQuote
+} from 'lucide-react';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { PaymentRecordItem } from '../../types';
@@ -8,7 +18,9 @@ import { Badge } from '../../components/common/Badge';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { EmptyState } from '../../components/common/EmptyState';
 import { Button } from '../../components/common/Button';
+import { Modal } from '../../components/common/Modal';
 import { formatINR } from '../../utils/currency';
+import { PaymentProofViewer } from '../../components/common/PaymentProofViewer';
 
 export const WorkerPaymentsPage: React.FC = () => {
   const { success, error: toastError } = useToast();
@@ -21,6 +33,9 @@ export const WorkerPaymentsPage: React.FC = () => {
   });
   const [loading, setLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
+  // Modal to inspect payment evidence
+  const [inspectingPayment, setInspectingPayment] = useState<PaymentRecordItem | null>(null);
 
   const fetchPayments = async () => {
     setLoading(true);
@@ -81,7 +96,7 @@ export const WorkerPaymentsPage: React.FC = () => {
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Payment Transparency & History</h1>
         <p className="text-xs text-slate-500">
-          Track recorded compensation, disbursed payments, and authorized audit confirmations.
+          Track recorded compensation, inspect uploaded employer payment screenshots, and confirm receipt of funds.
         </p>
       </div>
 
@@ -108,7 +123,7 @@ export const WorkerPaymentsPage: React.FC = () => {
       <div className="p-3 bg-slate-100 rounded-xl text-[11px] text-slate-500 flex items-center gap-2">
         <ShieldCheck className="w-4 h-4 text-slate-500 shrink-0" />
         <span>
-          WorkMatch clearly distinguishes between employer-recorded confirmations, worker verification, and gateway transfers without fabricating confirmation badges.
+          WorkMatch clearly displays verified employer screenshots and transaction references for full audit transparency.
         </span>
       </div>
 
@@ -123,41 +138,81 @@ export const WorkerPaymentsPage: React.FC = () => {
         <div className="space-y-3">
           {payments.map((p) => {
             const jobTitle = typeof p.job === 'object' ? p.job?.title : 'Temporary Shift';
+            const proofsCount = p.proofs?.length || 0;
+
             return (
               <Card key={p._id} className="p-5 space-y-3">
                 <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
-                  <div className="space-y-1">
+                  <div className="space-y-1.5 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Badge variant={getStatusBadgeVariant(p.status)} size="md">
                         {p.status}
                       </Badge>
-                      <span className="text-[11px] text-slate-400">
-                        Method: {p.paymentMethod}
+                      <span className="text-xs text-slate-600 font-medium">
+                        Method: <strong className="text-slate-800">{p.paymentMethod || 'Direct Transfer'}</strong>
                       </span>
                       {p.workerConfirmedReceipt ? (
                         <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-semibold flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Payee Confirmed Receipt
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> You Confirmed Receipt
                         </span>
-                      ) : (
-                        <span className="text-[10px] text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
-                          Status: Employer Recorded
+                      ) : p.status === 'PAID' ? (
+                        <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-medium">
+                          Awaiting Your Receipt Confirmation
                         </span>
-                      )}
+                      ) : null}
                     </div>
 
                     <h3 className="text-base font-bold text-slate-900 break-words">{jobTitle}</h3>
-                    <div className="flex items-center gap-2 text-xs text-slate-500 min-w-0">
-                      <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="truncate max-w-[200px] sm:max-w-xs" title={p.employer?.name}>Employer: {p.employer?.name}</span>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                      <div className="flex items-center gap-1">
+                        <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>Employer: <strong className="text-slate-700">{p.employer?.name}</strong></span>
+                      </div>
+                      <span>•</span>
+                      <span>Date: {new Date(p.createdAt).toLocaleDateString()}</span>
                     </div>
+
+                    {/* Transaction Reference & Notes */}
+                    {p.providerReference && (
+                      <div className="p-2 rounded-lg bg-slate-50 border border-slate-100 text-[11px] text-slate-700 font-mono inline-block">
+                        UTR / Transaction ID: <strong>{p.providerReference}</strong>
+                      </div>
+                    )}
+
+                    {p.notes && (
+                      <div className="p-2.5 rounded-lg bg-slate-50 text-xs text-slate-600 flex items-start gap-1.5">
+                        <MessageSquareQuote className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="text-slate-700">Employer Note:</strong> {p.notes}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Proof Attachments Button */}
+                    {proofsCount > 0 ? (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setInspectingPayment(p)}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200 transition-colors"
+                        >
+                          <Paperclip className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>View Payment Proof ({proofsCount} attachment{proofsCount > 1 ? 's' : ''})</span>
+                        </button>
+                      </div>
+                    ) : p.status === 'PAID' ? (
+                      <p className="text-[11px] text-slate-400 italic">No screenshot proof uploaded by employer.</p>
+                    ) : null}
                   </div>
 
-                  <div className="sm:text-right flex flex-col sm:items-end gap-2">
+                  <div className="sm:text-right flex flex-col sm:items-end gap-2.5">
                     <div>
-                      <div className="text-xl font-black text-slate-900">
+                      <div className="text-2xl font-black text-slate-900 tracking-tight">
                         {formatINR(p.amount)}
                       </div>
-                      <span className="text-xs text-slate-400">Rate basis: {p.basis}</span>
+                      <span className="text-[11px] text-slate-400">
+                        {p.basis === 'shift' ? 'Per Shift Flat' : 'Hourly Payment'}
+                      </span>
                     </div>
 
                     {p.status === 'PAID' && !p.workerConfirmedReceipt && (
@@ -166,22 +221,41 @@ export const WorkerPaymentsPage: React.FC = () => {
                         variant="primary"
                         isLoading={confirmingId === p._id}
                         onClick={() => handleConfirmReceipt(p._id)}
+                        leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
                       >
                         Confirm Receipt
                       </Button>
                     )}
                   </div>
                 </div>
-
-                {p.providerReference && (
-                  <div className="p-2.5 rounded-lg bg-slate-50 text-[11px] text-slate-600 font-mono">
-                    Ref ID: {p.providerReference}
-                  </div>
-                )}
               </Card>
             );
           })}
         </div>
+      )}
+
+      {/* Inspect Proof Modal for Worker */}
+      {inspectingPayment && (
+        <Modal
+          isOpen={Boolean(inspectingPayment)}
+          onClose={() => setInspectingPayment(null)}
+          title="Payment Evidence & Proof"
+          subtitle={`${typeof inspectingPayment.job === 'object' ? inspectingPayment.job?.title : 'Shift'} • ${formatINR(inspectingPayment.amount)}`}
+        >
+          <div className="space-y-4">
+            <PaymentProofViewer
+              paymentId={inspectingPayment._id}
+              proofs={inspectingPayment.proofs || []}
+              allowDelete={false}
+              title="Employer Disbursed Payment Receipts"
+            />
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <Button size="sm" variant="outline" onClick={() => setInspectingPayment(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

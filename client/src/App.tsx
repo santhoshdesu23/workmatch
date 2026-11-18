@@ -65,6 +65,7 @@ import { AdminReportsPage } from './pages/admin/AdminReportsPage';
 import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
 import { AdminAuditLogsPage } from './pages/admin/AdminAuditLogsPage';
 import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
+import { AdminPaymentsPage } from './pages/admin/AdminPaymentsPage';
 
 export function App() {
   return (
@@ -157,6 +158,7 @@ export function App() {
               <Route path="verifications" element={<AdminVerificationsPage />} />
               <Route path="reports" element={<AdminReportsPage />} />
               <Route path="analytics" element={<AdminAnalyticsPage />} />
+              <Route path="payments" element={<AdminPaymentsPage />} />
               <Route path="audit-logs" element={<AdminAuditLogsPage />} />
               <Route path="settings" element={<AdminSettingsPage />} />
             </Route>

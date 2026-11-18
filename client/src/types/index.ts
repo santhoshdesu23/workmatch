@@ -252,10 +252,21 @@ export interface Assignment {
   updatedAt: string;
 }
 
+export interface PaymentProof {
+  _id?: string;
+  fileId: string;
+  originalName: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  uploadedBy?: string;
+  uploadedAt: string;
+}
+
 export interface PaymentRecord {
   _id: string;
   assignment: string;
-  job: Job | { _id: string; title: string; workDate: string; totalHours: number };
+  job: Job | { _id: string; title: string; workDate: string; totalHours: number; payBasis?: string };
   worker: { _id: string; name: string; email: string };
   employer: { _id: string; name: string; email: string };
   amount: number;
@@ -269,6 +280,7 @@ export interface PaymentRecord {
   workerConfirmedReceipt?: boolean;
   workerConfirmedReceiptAt?: string;
   notes?: string;
+  proofs?: PaymentProof[];
   history?: Array<{
     status: string;
     note?: string;

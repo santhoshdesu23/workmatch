@@ -74,6 +74,39 @@ const paymentRecordSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
+    proofs: [
+      {
+        fileId: {
+          type: mongoose.Schema.Types.ObjectId,
+          required: true
+        },
+        originalName: {
+          type: String,
+          required: true
+        },
+        fileName: {
+          type: String,
+          required: true
+        },
+        mimeType: {
+          type: String,
+          required: true
+        },
+        size: {
+          type: Number,
+          required: true
+        },
+        uploadedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true
+        },
+        uploadedAt: {
+          type: Date,
+          default: Date.now
+        }
+      }
+    ],
     history: [
       {
         status: { type: String, required: true },

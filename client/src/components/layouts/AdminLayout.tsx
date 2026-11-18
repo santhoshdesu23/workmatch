@@ -20,7 +20,8 @@ import {
   UserX,
   FileSearch,
   Clock,
-  Sparkles
+  Sparkles,
+  CreditCard
 } from 'lucide-react';
 import { Navbar } from '../common/Navbar';
 import { useAuth } from '../../context/AuthContext';
@@ -71,6 +72,7 @@ export const AdminLayout: React.FC = () => {
     { label: 'Attendance Monitoring', to: '/admin/attendance', icon: CalendarCheck },
     { label: 'Verification Management', to: '/admin/verifications', icon: ShieldCheck },
     { label: 'Reports & Complaints', to: '/admin/reports', icon: AlertTriangle },
+    { label: 'Payments & Evidence', to: '/admin/payments', icon: CreditCard },
     { label: 'Analytics & Reports', to: '/admin/analytics', icon: BarChart3 },
     { label: 'Admin Activity Logs', to: '/admin/audit-logs', icon: ScrollText },
     { label: 'Settings', to: '/admin/settings', icon: Settings }

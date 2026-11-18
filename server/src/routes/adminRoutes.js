@@ -24,6 +24,7 @@ import {
   getAdminSettings,
   updateAdminSetting
 } from '../controllers/adminController.js';
+import { getAdminPayments } from '../controllers/paymentsController.js';
 import { requireAuth, requireRole } from '../middleware/authMiddleware.js';
 import { ROLES } from '../config/constants.js';
 
@@ -74,5 +75,8 @@ router.get('/audit-logs', getAdminAuditLogs);
 // 10. Platform Settings
 router.get('/settings', getAdminSettings);
 router.patch('/settings', updateAdminSetting);
+
+// 11. Platform Payments & Evidence Review
+router.get('/payments', getAdminPayments);
 
 export default router;
