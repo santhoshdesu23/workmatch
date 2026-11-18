@@ -8,6 +8,7 @@
     "dev": "node --watch src/server.js",
     "seed": "node src/seed.js",
     "seed:local": "node scripts/seed_atigre_kolhapur_jobs.js",
+    "seed:catering": "node scripts/seed_demo_catering_jobs_for_kolhapur_employer.js",
     "cleanup:nyc": "node scripts/backup_and_cleanup_jobs.js",
     "test": "vitest run",
     "test:load": "node scripts/load_test.js"
