@@ -22,6 +22,7 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { EmptyState } from '../../components/common/EmptyState';
+import { LocationPicker } from '../../components/common/LocationPicker';
 import { formatPayWithBasis } from '../../utils/currency';
 import {
   validateJobSchedule,
@@ -61,6 +62,7 @@ export const EmployerJobsPage: React.FC = () => {
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editLocationName, setEditLocationName] = useState('');
+  const [editCoordinates, setEditCoordinates] = useState<[number, number] | null>(null);
   const [editWorkDate, setEditWorkDate] = useState('');
   const [editWorkEndDate, setEditWorkEndDate] = useState('');
   const [editStartTime, setEditStartTime] = useState('');
@@ -96,6 +98,10 @@ export const EmployerJobsPage: React.FC = () => {
     setEditTitle(job.title);
     setEditDescription(job.description);
     setEditLocationName(job.locationName);
+    const existingCoords = job.location?.coordinates && Array.isArray(job.location.coordinates) && job.location.coordinates.length === 2
+      ? [Number(job.location.coordinates[0]), Number(job.location.coordinates[1])] as [number, number]
+      : null;
+    setEditCoordinates(existingCoords);
     setEditWorkDate(startCal);
     setEditWorkEndDate(endCal);
     setEditStartTime(job.startTime);
@@ -154,6 +160,10 @@ export const EmployerJobsPage: React.FC = () => {
         openings: editOpenings,
         reason: editReason
       };
+
+      if (editCoordinates && editCoordinates.length === 2) {
+        payload.coordinates = editCoordinates;
+      }
 
       const origStartCal = formatCalendarDate(editingJob.workDate);
       const origEndCal = formatCalendarDate(editingJob.workEndDate || editingJob.workDate) || origStartCal;
@@ -421,13 +431,14 @@ export const EmployerJobsPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Location Address</label>
-            <input
-              type="text"
+            <LocationPicker
+              initialLocationName={editLocationName}
+              initialCoordinates={editCoordinates}
+              onLocationChange={(newLocName, newCoords) => {
+                setEditLocationName(newLocName);
+                setEditCoordinates(newCoords);
+              }}
               required
-              value={editLocationName}
-              onChange={(e) => setEditLocationName(e.target.value)}
-              className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500"
             />
           </div>
 

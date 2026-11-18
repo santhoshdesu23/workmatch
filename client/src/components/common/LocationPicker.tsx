@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import L from 'leaflet';
-import { Search, MapPin, Navigation, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import 'leaflet/dist/leaflet.css';
+import { Search, MapPin, Navigation, CheckCircle2, AlertCircle, Loader2, Focus } from 'lucide-react';
 import api from '../../api/client';
 import { Button } from './Button';
 
@@ -19,6 +20,30 @@ interface LocationPickerProps {
   onLocationChange: (locationName: string, coordinates: [number, number]) => void;
   required?: boolean;
 }
+
+// Custom icon creator
+const createVenueIcon = () =>
+  L.divIcon({
+    className: 'custom-venue-marker',
+    html: `
+      <div style="
+        background-color: #059669;
+        color: white;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 3px solid white;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+        font-size: 18px;
+        cursor: grab;
+      ">📍</div>
+    `,
+    iconSize: [36, 36],
+    iconAnchor: [18, 32]
+  });
 
 export const LocationPicker: React.FC<LocationPickerProps> = ({
   initialLocationName = '',
@@ -40,17 +65,182 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
   const markerRef = useRef<L.Marker | null>(null);
   const circleRef = useRef<L.Circle | null>(null);
   const searchTimeoutRef = useRef<any>(null);
+  const searchWrapperRef = useRef<HTMLDivElement>(null);
 
-  // Sync initial values
+  // Close search suggestions on outside click
   useEffect(() => {
-    if (initialLocationName && !query) {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (searchWrapperRef.current && !searchWrapperRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  // Update map view, marker, and 200m geofence circle
+  const updateMapPosition = useCallback((lat: number, lng: number, recenter = false) => {
+    if (!mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+
+    if (recenter) {
+      map.setView([lat, lng], 16);
+    }
+
+    if (markerRef.current) {
+      markerRef.current.setLatLng([lat, lng]);
+    } else {
+      const marker = L.marker([lat, lng], {
+        icon: createVenueIcon(),
+        draggable: true
+      }).addTo(map);
+
+      marker.on('dragend', (e: any) => {
+        const newLatLng = e.target.getLatLng();
+        handleManualPinAdjustment(newLatLng.lat, newLatLng.lng);
+      });
+      markerRef.current = marker;
+    }
+
+    // 200-metre attendance geofence circle
+    if (circleRef.current) {
+      circleRef.current.setLatLng([lat, lng]);
+    } else {
+      const circle = L.circle([lat, lng], {
+        radius: 200,
+        color: '#059669',
+        fillColor: '#10b981',
+        fillOpacity: 0.18,
+        weight: 2,
+        dashArray: '4, 6'
+      }).addTo(map);
+      circleRef.current = circle;
+    }
+
+    map.invalidateSize();
+  }, []);
+
+  // Sync initial values from props (e.g., job editing or restored draft)
+  useEffect(() => {
+    if (initialLocationName && initialLocationName !== query) {
       setQuery(initialLocationName);
       setConfirmedAddress(initialLocationName);
     }
-    if (initialCoordinates && initialCoordinates.length === 2 && !coordinates) {
+    if (
+      initialCoordinates &&
+      initialCoordinates.length === 2 &&
+      (!coordinates || coordinates[0] !== initialCoordinates[0] || coordinates[1] !== initialCoordinates[1])
+    ) {
       setCoordinates(initialCoordinates);
+      updateMapPosition(initialCoordinates[1], initialCoordinates[0], true);
     }
-  }, [initialLocationName, initialCoordinates]);
+  }, [initialLocationName, initialCoordinates, updateMapPosition]);
+
+  // Handle manual map pin drag or click
+  const handleManualPinAdjustment = async (lat: number, lng: number) => {
+    const coords: [number, number] = [lng, lat];
+    setCoordinates(coords);
+    updateMapPosition(lat, lng, false);
+
+    setIsReverseGeocoding(true);
+    try {
+      const res = await api.get(`/location/reverse?lat=${lat}&lng=${lng}`);
+      const addr = res.data?.locationName || `Location near ${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E`;
+      setQuery(addr);
+      setConfirmedAddress(addr);
+      onLocationChange(addr, coords);
+    } catch {
+      const fallback = `Pinned Location (${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E)`;
+      setQuery(fallback);
+      setConfirmedAddress(fallback);
+      onLocationChange(fallback, coords);
+    } finally {
+      setIsReverseGeocoding(false);
+    }
+  };
+
+  // Initialize Leaflet map
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+
+    // Sanjay Ghodawat / Kolhapur area as smart default if no coordinates yet
+    const defaultLat = coordinates && coordinates.length === 2 ? coordinates[1] : 16.74186;
+    const defaultLng = coordinates && coordinates.length === 2 ? coordinates[0] : 74.38193;
+
+    // Ensure clean container
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+    }
+    if ((mapContainerRef.current as any)._leaflet_id) {
+      delete (mapContainerRef.current as any)._leaflet_id;
+    }
+
+    const map = L.map(mapContainerRef.current, {
+      scrollWheelZoom: false,
+      zoomControl: true,
+      attributionControl: true
+    }).setView([defaultLat, defaultLng], coordinates ? 16 : 14);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+      maxZoom: 19
+    }).addTo(map);
+
+    // Click anywhere on map to drop / reposition pin
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      handleManualPinAdjustment(e.latlng.lat, e.latlng.lng);
+    });
+
+    // Create marker
+    const marker = L.marker([defaultLat, defaultLng], {
+      icon: createVenueIcon(),
+      draggable: true
+    }).addTo(map);
+
+    marker.on('dragend', (e: any) => {
+      const newLatLng = e.target.getLatLng();
+      handleManualPinAdjustment(newLatLng.lat, newLatLng.lng);
+    });
+    markerRef.current = marker;
+
+    // Create 200m circle
+    const circle = L.circle([defaultLat, defaultLng], {
+      radius: 200,
+      color: '#059669',
+      fillColor: '#10b981',
+      fillOpacity: 0.18,
+      weight: 2,
+      dashArray: '4, 6'
+    }).addTo(map);
+    circleRef.current = circle;
+
+    mapInstanceRef.current = map;
+
+    // Force tile recalculation once DOM settles
+    const t1 = setTimeout(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    }, 150);
+
+    const t2 = setTimeout(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    }, 450);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+      markerRef.current = null;
+      circleRef.current = null;
+    };
+  }, []);
 
   // Handle location search with debounce
   const handleQueryChange = (text: string) => {
@@ -76,7 +266,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
       } finally {
         setIsSearching(false);
       }
-    }, 350);
+    }, 300);
   };
 
   // Select a suggestion
@@ -108,12 +298,12 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
         try {
           setIsReverseGeocoding(true);
           const res = await api.get(`/location/reverse?lat=${lat}&lng=${lng}`);
-          const addr = res.data?.locationName || `Location near ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
+          const addr = res.data?.locationName || `Location near ${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E`;
           setQuery(addr);
           setConfirmedAddress(addr);
           onLocationChange(addr, coords);
         } catch {
-          const fallback = `Coordinates: ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
+          const fallback = `Coordinates: ${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E`;
           setQuery(fallback);
           setConfirmedAddress(fallback);
           onLocationChange(fallback, coords);
@@ -131,110 +321,18 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
     );
   };
 
-  // Update map view and pin marker
-  const updateMapPosition = (lat: number, lng: number, recenter = false) => {
-    if (!mapInstanceRef.current) return;
-    const map = mapInstanceRef.current;
-
-    if (recenter) {
-      map.setView([lat, lng], 16);
-    }
-
-    const pinIcon = L.divIcon({
-      className: 'custom-venue-marker',
-      html: `<div style="background-color: #059669; color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.3); font-size: 16px;">📍</div>`,
-      iconSize: [32, 32],
-      iconAnchor: [16, 30]
-    });
-
-    if (markerRef.current) {
-      markerRef.current.setLatLng([lat, lng]);
-    } else {
-      const marker = L.marker([lat, lng], { icon: pinIcon, draggable: true }).addTo(map);
-      marker.on('dragend', async (e) => {
-        const newLatLng = e.target.getLatLng();
-        handleManualPinAdjustment(newLatLng.lat, newLatLng.lng);
-      });
-      markerRef.current = marker;
-    }
-
-    // 200-metre attendance geofence circle
-    if (circleRef.current) {
-      circleRef.current.setLatLng([lat, lng]);
-    } else {
-      const circle = L.circle([lat, lng], {
-        radius: 200,
-        color: '#059669',
-        fillColor: '#10b981',
-        fillOpacity: 0.18,
-        weight: 2,
-        dashArray: '4, 6'
-      }).addTo(map);
-      circleRef.current = circle;
+  // Recenter button
+  const handleRecenterPin = () => {
+    if (coordinates && coordinates.length === 2 && mapInstanceRef.current) {
+      mapInstanceRef.current.setView([coordinates[1], coordinates[0]], 16);
+      mapInstanceRef.current.invalidateSize();
     }
   };
-
-  // Handle manual map pin drag or click
-  const handleManualPinAdjustment = async (lat: number, lng: number) => {
-    const coords: [number, number] = [lng, lat];
-    setCoordinates(coords);
-    updateMapPosition(lat, lng, false);
-
-    setIsReverseGeocoding(true);
-    try {
-      const res = await api.get(`/location/reverse?lat=${lat}&lng=${lng}`);
-      const addr = res.data?.locationName || `Location near ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
-      setQuery(addr);
-      setConfirmedAddress(addr);
-      onLocationChange(addr, coords);
-    } catch {
-      const fallback = `Pinned Location (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)`;
-      setQuery(fallback);
-      setConfirmedAddress(fallback);
-      onLocationChange(fallback, coords);
-    } finally {
-      setIsReverseGeocoding(false);
-    }
-  };
-
-  // Initialize Leaflet map
-  useEffect(() => {
-    if (!mapContainerRef.current) return;
-
-    const defaultLat = coordinates ? coordinates[1] : 16.7410;
-    const defaultLng = coordinates ? coordinates[0] : 74.3720;
-
-    if (!mapInstanceRef.current) {
-      const map = L.map(mapContainerRef.current, {
-        scrollWheelZoom: false
-      }).setView([defaultLat, defaultLng], coordinates ? 16 : 13);
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
-        maxZoom: 19
-      }).addTo(map);
-
-      // Allow clicking anywhere on the map to set pin
-      map.on('click', (e: L.LeafletMouseEvent) => {
-        handleManualPinAdjustment(e.latlng.lat, e.latlng.lng);
-      });
-
-      mapInstanceRef.current = map;
-
-      if (coordinates) {
-        updateMapPosition(coordinates[1], coordinates[0], false);
-      }
-    }
-
-    return () => {
-      // Cleanup on unmount if needed
-    };
-  }, []);
 
   return (
     <div className="space-y-3">
       {/* Search Input & GPS Button */}
-      <div className="relative">
+      <div ref={searchWrapperRef} className="relative z-20">
         <label className="block text-xs font-semibold text-slate-700 mb-1">
           Shift Location & GPS Reference Point {required && <span className="text-rose-500">*</span>}
         </label>
@@ -268,9 +366,9 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
           </Button>
         </div>
 
-        {/* Suggestions Dropdown */}
+        {/* Suggestions Dropdown (high z-index to stay above Leaflet controls) */}
         {showDropdown && suggestions.length > 0 && (
-          <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+          <div className="absolute z-[1001] left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
             {suggestions.map((item) => (
               <button
                 key={item.id}
@@ -291,16 +389,35 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
 
       {/* Interactive Map Preview */}
       <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-        <div className="bg-slate-100 px-3 py-1.5 border-b border-slate-200 flex items-center justify-between text-[11px] text-slate-600">
+        <div className="bg-slate-100 px-3 py-1.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600">
           <div className="flex items-center gap-1.5">
-            <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+            <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
             <span>Click map or drag the pin to adjust exact attendance location</span>
           </div>
-          <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-            200m Attendance Radius
-          </span>
+          <div className="flex items-center gap-2">
+            {coordinates && (
+              <button
+                type="button"
+                onClick={handleRecenterPin}
+                className="text-slate-600 hover:text-emerald-700 flex items-center gap-1 text-[10px] font-medium bg-white px-2 py-0.5 rounded border border-slate-200 hover:border-emerald-300 transition-colors"
+                title="Recenter view on pin"
+              >
+                <Focus className="w-3 h-3 text-emerald-600" />
+                Recenter
+              </button>
+            )}
+            <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              200m Attendance Radius
+            </span>
+          </div>
         </div>
-        <div ref={mapContainerRef} className="h-56 w-full z-0" />
+
+        {/* Map Canvas with guaranteed height */}
+        <div
+          ref={mapContainerRef}
+          style={{ height: '320px', minHeight: '320px', width: '100%' }}
+          className="relative w-full z-0 bg-slate-100"
+        />
       </div>
 
       {/* Location Confirmation Banner */}
@@ -315,7 +432,9 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
               Latitude: {coordinates[1].toFixed(5)}°N, Longitude: {coordinates[0].toFixed(5)}°E
             </p>
             {isReverseGeocoding && (
-              <p className="text-[10px] text-slate-500 italic">Updating address description...</p>
+              <p className="text-[10px] text-slate-500 italic flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin text-emerald-600 inline" /> Updating address description...
+              </p>
             )}
           </div>
           <div className="text-right">

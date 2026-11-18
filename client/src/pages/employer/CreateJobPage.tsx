@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -90,6 +90,34 @@ export const CreateJobPage: React.FC = () => {
   const [cancellationPolicy, setCancellationPolicy] = useState('Notice must be provided at least 12 hours prior to shift commencement');
   const [applicationDeadline, setApplicationDeadline] = useState('');
   const [detailsConfirmed, setDetailsConfirmed] = useState(false);
+
+  // Automatically calculate total billable hours when schedule or break changes
+  useEffect(() => {
+    if (startTime && endTime) {
+      const [startH, startM] = startTime.split(':').map(Number);
+      const [endH, endM] = endTime.split(':').map(Number);
+      if (!isNaN(startH) && !isNaN(startM) && !isNaN(endH) && !isNaN(endM)) {
+        let startMinutes = startH * 60 + startM;
+        let endMinutes = endH * 60 + endM;
+        const sDate = workDate || todayDateStr;
+        const eDate = workEndDate || sDate;
+
+        if (eDate > sDate) {
+          endMinutes += 24 * 60;
+        }
+
+        if (endMinutes > startMinutes) {
+          const totalShiftMinutes = endMinutes - startMinutes;
+          const breakMins = Math.max(0, Number(breakDurationMinutes) || 0);
+          const billableMinutes = Math.max(0, totalShiftMinutes - breakMins);
+          const computedHours = Math.round((billableMinutes / 60) * 100) / 100;
+          if (computedHours > 0) {
+            setTotalHours(computedHours);
+          }
+        }
+      }
+    }
+  }, [startTime, endTime, workDate, workEndDate, breakDurationMinutes]);
 
   const categories = [
     'Event assistance',
@@ -589,12 +617,15 @@ export const CreateJobPage: React.FC = () => {
               <label className="block text-xs font-semibold text-slate-700 mb-1">Total Billable Hours</label>
               <input
                 type="number"
-                step="0.25"
+                step="0.05"
                 min="0.5"
                 value={totalHours}
                 onChange={(e) => setTotalHours(Number(e.target.value))}
-                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none"
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-xl focus:outline-none bg-slate-50 font-semibold text-slate-900"
               />
+              <p className="text-[10px] text-slate-500 mt-1">
+                Net paid hours = (End Time − Start Time) − Meal/Rest Break.
+              </p>
             </div>
           </div>
         </Card>

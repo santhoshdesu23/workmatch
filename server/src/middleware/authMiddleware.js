@@ -92,16 +92,11 @@ export const requireRole = (...roles) => {
     // Explicit security invariant for administrator role:
     // Administrator privileges cannot be granted by activeRole switching;
     // they must be persistently assigned in user.role or user.roles.
-    if (roles.includes('admin')) {
-      const isGenuineAdmin =
-        req.user.role === 'admin' ||
-        (Array.isArray(req.user.roles) && req.user.roles.includes('admin'));
-      if (!isGenuineAdmin) {
-        return res.status(403).json({
-          success: false,
-          message: 'Access denied. Dedicated administrator privileges required.'
-        });
-      }
+    const isGenuineAdmin =
+      req.user.role === 'admin' ||
+      (Array.isArray(req.user.roles) && req.user.roles.includes('admin'));
+
+    if (roles.includes('admin') && isGenuineAdmin) {
       return next();
     }
 
@@ -115,9 +110,16 @@ export const requireRole = (...roles) => {
       )
     );
 
-    const hasAllowedRole = roles.some((role) => userRoles.includes(role));
+    const nonAdminRoles = roles.filter((r) => r !== 'admin');
+    const hasAllowedNonAdminRole = nonAdminRoles.some((role) => userRoles.includes(role));
 
-    if (!hasAllowedRole) {
+    if (!hasAllowedNonAdminRole) {
+      if (roles.includes('admin') && nonAdminRoles.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. Dedicated administrator privileges required.'
+        });
+      }
       return res.status(403).json({
         success: false,
         message: `Access denied. Requires one of the following roles: ${roles.join(', ')}.`
